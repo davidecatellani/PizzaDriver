@@ -11,17 +11,14 @@ export const RIDES = [
   { id: 'hover', name: 'Hoverboard', price: 900, blurb: 'Floats over the basoli.', stats: { float: 0.22, push: false } },
 ];
 
-// Five levels each; `apply(stats, level)` changes the ride's numbers.
+// Five levels each; `apply(stats, level)` changes the numbers. Nothing here touches the driving
+// (Davide: a game of skill, the same handling for everyone).
 export const UPGRADES = [
-  { id: 'speed', name: 'Motor', blurb: 'Top speed and acceleration.',
-    apply: (s, l) => { s.maxSpeed *= 1 + 0.03 * l; s.accel *= 1 + 0.05 * l; } },
-  { id: 'turbo', name: 'Turbo tank', blurb: 'Bank more turbo, and it pushes harder.',
-    apply: (s, l) => { s.turboMax += 0.6 * l; s.boostMultiplier += 0.03 * l; } },
-  { id: 'grip', name: 'Tyres', blurb: 'Sharper steering.',
-    apply: (s, l) => { s.turnRate *= 1 + 0.05 * l; } },
-  { id: 'bag', name: 'Thermal bag', blurb: 'Crashes cool the pizza less.',
+  { id: 'bag', name: 'Thermal bag', blurb: 'Crashes cool the pizza less, for bigger tips.',
     apply: (s, l) => { s.heatLoss *= 1 - 0.13 * l; } },
 ];
+// Upgrades that used to change the driving; levels bought are refunded (see Profile.refund).
+const RETIRED = ['speed', 'turbo', 'grip'];
 export const UPGRADE_COST = [40, 80, 140, 220, 320];
 export const MAX_LEVEL = UPGRADE_COST.length;
 
@@ -44,7 +41,16 @@ export const JACKETS = [
   { id: 'pink', name: 'Bubblegum', price: 40, color: 0xf28ab8 },
 ];
 
-const DEFAULT = { owned: ['scooter', 'helmet-cap', 'jacket-white'], ride: 'scooter', helmet: 'cap', jacket: 'white', levels: {} };
+// Colours of the boost flame: [outer, inner], or 'rainbow'.
+export const FLAMES = [
+  { id: 'classic', name: 'Classic', price: 0, colors: [0xffa53a, 0x52c8ff] },
+  { id: 'toxic', name: 'Toxic', price: 60, colors: [0x39ff88, 0xd4ff3a] },
+  { id: 'neon', name: 'Neon', price: 80, colors: [0xc34bff, 0xff4fd8] },
+  { id: 'napoli', name: 'Azzurri', price: 100, colors: [0x2a8fe0, 0xffffff] },
+  { id: 'rainbow', name: 'Rainbow', price: 200, colors: 'rainbow' },
+];
+
+const DEFAULT = { owned: ['scooter', 'helmet-cap', 'jacket-white', 'flame-classic'], ride: 'scooter', helmet: 'cap', jacket: 'white', flame: 'classic', levels: {} };
 
 // The player's garage, saved through `store` (get/set with JSON values).
 export class Profile {
@@ -52,11 +58,23 @@ export class Profile {
     this.store = store;
     const saved = store.get('garage', null);
     Object.assign(this, structuredClone(DEFAULT), saved || {});
+    if (!this.owns('flame-classic')) this.owned.push('flame-classic');
+  }
+
+  // Tips back for levels of upgrades that no longer exist; returns the amount.
+  refund() {
+    let back = 0;
+    for (const id of RETIRED) {
+      for (let l = 0; l < this.level(id); l++) back += UPGRADE_COST[l];
+      delete this.levels[id];
+    }
+    if (back) this.save();
+    return back;
   }
 
   save() {
-    const { owned, ride, helmet, jacket, levels } = this;
-    this.store.set('garage', { owned, ride, helmet, jacket, levels });
+    const { owned, ride, helmet, jacket, flame, levels } = this;
+    this.store.set('garage', { owned, ride, helmet, jacket, flame, levels });
   }
 
   owns(id) { return this.owned.includes(id); }
@@ -75,6 +93,7 @@ export class Profile {
       ride: this.ride,
       helmet: HELMETS.find((h) => h.id === this.helmet),
       jacket: JACKETS.find((j) => j.id === this.jacket),
+      flame: (FLAMES.find((f) => f.id === this.flame) || FLAMES[0]).colors,
       bag: this.level('bag'),
     };
   }

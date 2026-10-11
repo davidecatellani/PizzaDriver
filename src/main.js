@@ -77,6 +77,8 @@ class Game {
     this.lastAd = performance.now() / 1000;
     this.totalTips = store.get('tips', 0);
     this.profile = new Profile(store);
+    const refund = this.profile.refund();   // driving upgrades were withdrawn
+    if (refund) { this.totalTips += refund; store.set('tips', this.totalTips); }
     this.player.equip(this.profile);
     this.garage = new Garage(this, this.profile);
     this.earned = store.get('earned', this.totalTips);   // all-time tips, for the Richest Riders board

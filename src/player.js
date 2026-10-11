@@ -21,7 +21,9 @@ export class Player {
   equip(profile) {
     this.S = profile.stats();
     this.scene.remove(this.mesh);
-    this.mesh = makeRider(0xffffff, 0xd62828, 'rider', profile.look());
+    const look = profile.look();
+    this.flame = look.flame;
+    this.mesh = makeRider(0xffffff, 0xd62828, 'rider', look);
     this.scene.add(this.mesh);
     this.sync();
   }

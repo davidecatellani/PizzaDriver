@@ -91,9 +91,12 @@ export class Fx {
     }
     if (p.boosting && p.speed > 5) {
       const [x, z] = Fx.rear(p, 1.2);
+      // Flame colours from the garage: [outer, inner], or a cycling rainbow.
+      const fl = p.flame || [0xffa53a, 0x52c8ff];
+      const rainbow = fl === 'rainbow' && new THREE.Color().setHSL((performance.now() / 600) % 1, 1, 0.6).getHex();
       for (let k = 0; k < 2; k++) {
         this.fire.emit(x + rnd(0.3), p.pos.y + 0.45 + rnd(0.2), z + rnd(0.3), -Math.sin(p.heading) * 6 + rnd(2), rnd(1), -Math.cos(p.heading) * 6 + rnd(2),
-          0.25, 0.7, -1.5, k ? 0xffa53a : 0x52c8ff, 0.9);
+          0.25, 0.7, -1.5, rainbow || (k ? fl[0] : fl[1]), 0.9);
       }
     }
     this.smoke.update(dt);

@@ -1,4 +1,4 @@
-import { RIDES, UPGRADES, UPGRADE_COST, MAX_LEVEL, HELMETS, JACKETS } from './shop.js';
+import { RIDES, UPGRADES, UPGRADE_COST, MAX_LEVEL, HELMETS, JACKETS, FLAMES } from './shop.js';
 
 // The garage screen: buy and pick rides, upgrades and style with delivery tips.
 // `game` provides totalTips, spendTips(n), player.equip(profile), rewarded(grant), audio.
@@ -47,7 +47,7 @@ export class Garage {
       g.spendTips(cost);
       p.levels[id] = p.level(id) + 1;
     } else {
-      const list = { ride: RIDES, helmet: HELMETS, jacket: JACKETS }[slot];
+      const list = { ride: RIDES, helmet: HELMETS, jacket: JACKETS, flame: FLAMES }[slot];
       const it = list.find((x) => x.id === id);
       const key = slot === 'ride' ? id : `${slot}-${id}`;
       if (!p.owns(key)) {
@@ -84,7 +84,7 @@ export class Garage {
       for (const u of UPGRADES) {
         const l = p.level(u.id);
         const pips = `<div class="g-pips">${Array.from({ length: MAX_LEVEL }, (_, k) => `<span class="${k < l ? 'on' : ''}"></span>`).join('')}</div>`;
-        const icon = { speed: '⚙️', turbo: '🔥', grip: '🛞', bag: '🍕' }[u.id];
+        const icon = { bag: '🍕' }[u.id];
         const cost = UPGRADE_COST[l];
         const button = l >= MAX_LEVEL ? '<span class="tag">MAX</span>'
           : `<button class="buy" data-act="upgrade" data-id="${u.id}" ${this.game.totalTips >= cost ? '' : 'disabled'}>$${cost}</button>`;
@@ -96,6 +96,12 @@ export class Garage {
       for (const h of HELMETS) html += this.item('helmet', { ...h, swatch: hex(h.color ?? 0xd62828) }, p.owns(`helmet-${h.id}`), p.helmet === h.id);
       html += '<div class="g-name">JACKET</div>';
       for (const j of JACKETS) html += this.item('jacket', { ...j, swatch: hex(j.color ?? 0xffffff) }, p.owns(`jacket-${j.id}`), p.jacket === j.id);
+      html += '<div class="g-name">TURBO FLAME</div>';
+      for (const f of FLAMES) {
+        const swatch = f.colors === 'rainbow' ? 'conic-gradient(red, orange, yellow, lime, cyan, blue, magenta, red)'
+          : `radial-gradient(circle, ${hex(f.colors[1])} 30%, ${hex(f.colors[0])} 75%)`;
+        html += this.item('flame', { ...f, swatch }, p.owns(`flame-${f.id}`), p.flame === f.id);
+      }
     }
     $('g-list').innerHTML = html;
   }
