@@ -9,17 +9,21 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 const loaded = new Map();
 
 export async function loadModels() {
-  let ids = [];
+  let manifest;
   try {
-    const res = await fetch('models/manifest.json');
-    ids = (await res.json()).models ?? [];
+    manifest = await (await fetch('models/manifest.json')).json();
   } catch {
     return;
   }
   // The optimized models use meshopt compression (tools/meshy/optimize.sh).
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  // A manifest may point to a pack: one JSON file of base64 GLBs, for hosts that serve few file types.
+  const pack = manifest.pack ? await (await fetch(`models/${manifest.pack}`)).json() : null;
+  const ids = manifest.models ?? [];
   const results = await Promise.allSettled(ids.map(async (id) => {
-    const gltf = await loader.loadAsync(`models/${id}.glb`);
+    const gltf = pack
+      ? await loader.parseAsync(Uint8Array.from(atob(pack[id]), (c) => c.charCodeAt(0)).buffer, '')
+      : await loader.loadAsync(`models/${id}.glb`);
     gltf.scene.traverse((o) => {
       if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
     });
