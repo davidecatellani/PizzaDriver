@@ -256,7 +256,33 @@ export class Rig {
     aim(lo, end.getWorldPosition(C), A.clone().addScaledVector(dir, dist));
   }
 
-  // s: { speed (0..1), steer (-1..1), air, airTime, drift, boost, crash (0..1), cheer, kick }
+  // Walking on foot: legs and arms swing with `speed` (m/s); `panic` throws the arms up.
+  walk(dt, speed, panic = 0) {
+    const { b, m } = this;
+    this.t += dt;
+    this.phase = (this.phase ?? Math.random() * 6) + dt * speed * 3.4;
+    const sw = Math.sin(this.phase) * Math.min(1, speed / 1.2);
+    if (!m.seated) {
+      b.thighL.rotation.set(sw * 0.45, 0, 0);
+      b.thighR.rotation.set(-sw * 0.45, 0, 0);
+      b.shinL.rotation.set(Math.max(0, sw) * 0.6, 0, 0);
+      b.shinR.rotation.set(Math.max(0, -sw) * 0.6, 0, 0);
+      b.hips.position.y = this.hipsY + Math.abs(Math.cos(this.phase)) * 0.015 * m.H;
+      b.spine.rotation.set(0.04, sw * 0.08, 0);
+      b.chest.rotation.set(0, -sw * 0.1, 0);
+    }
+    b.head.rotation.set(0, Math.sin(this.t * 0.7) * 0.3, 0);
+    for (const [k, sgn] of [['L', 1], ['R', -1]]) {
+      const hang = THREE.MathUtils.lerp(-sgn * 1.45, sgn * 0.5 + Math.sin(this.t * 15 + sgn) * 0.3, panic);
+      const swing = -sgn * sw * 0.35 * (1 - panic);
+      b[`arm${k}`].quaternion.setFromEuler(new THREE.Euler(swing, 0, hang, 'XYZ'));
+      b[`fore${k}`].quaternion.identity();
+      b[`hand${k}`].quaternion.identity();
+    }
+  }
+
+  // s: { speed (0..1), steer (-1..1), air, airTime, drift, boost, crash (0..1), cheer, kick,
+  //      attack: { side: 1 left / -1 right, t: 0..1 } while kicking a rival }
   update(dt, s) {
     const { b, m } = this;
     this.t += dt;
@@ -280,13 +306,18 @@ export class Rig {
       const legs = [['L', bend + bob, -0.12], ['R', bend + bob * 0.5, 0.18 + kick]];
       let drop = 0;
       const legLen = m.hipY - m.footY;
+      // Side kick: the leg on that side swings out straight, the body leans away from it.
+      const atk = s.attack ? Math.sin(Math.PI * s.attack.t) : 0;
+      const atkSide = s.attack ? (s.attack.side > 0 ? 'L' : 'R') : null;
       for (const [side, a, off] of legs) {
-        b[`thigh${side}`].rotation.set(-a + off, 0, 0);
-        b[`shin${side}`].rotation.set(2 * a - Math.max(0, off) * 0.5, 0, 0);
+        const out = side === atkSide ? atk : 0;
+        b[`thigh${side}`].rotation.set((-a + off) * (1 - out), 0, (side === 'L' ? 1 : -1) * 1.35 * out);
+        b[`shin${side}`].rotation.set((2 * a - Math.max(0, off) * 0.5) * (1 - out), 0, 0);
         drop += legLen * (1 - Math.cos(a)) / 2;
       }
       b.hips.position.y = this.hipsY - drop;
-      b.spine.rotation.set(fwd * 0.6, 0, -lean * 0.12);
+      const away = s.attack ? -s.attack.side * 0.4 * atk : 0;
+      b.spine.rotation.set(fwd * 0.6, 0, -lean * 0.12 + away);
       b.chest.rotation.set(fwd * 0.4 + flail * 0.2 * Math.sin(this.t * 11), lean * 0.15, -lean * 0.1);
     }
 
@@ -303,6 +334,11 @@ export class Rig {
       if (flail > 0.01) {
         const f = _e.set(sgn * (m.sx + 0.45 * H), m.neckY + Math.sin(this.t * 14 + sgn) * 0.25 * H, m.sz + Math.cos(this.t * 11 + sgn) * 0.2 * H);
         target.lerp(f, flail);
+      }
+      // Seated riders (no legs to kick with) shove with the arm on that side instead.
+      if (s.attack && m.seated && s.attack.side === sgn) {
+        const shove = _e.set(sgn * (m.sx + 0.6 * H), m.sy, m.sz + 0.1 * H);
+        target.lerp(shove, Math.sin(Math.PI * s.attack.t));
       }
       const pole = new THREE.Vector3(sgn * (m.sx + 0.4 * H), m.sy - 0.4 * H, m.sz - 0.3 * H);
       this.reach(side, target, pole);

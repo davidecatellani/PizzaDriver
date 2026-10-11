@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Look, SUN_DIR } from './look.js';
 import { Fx } from './fx.js';
+import { People } from './people.js';
 import { CELL, DELIVERIES, RACE, PLAYER } from './config.js';
 import { loadModels } from './assets.js';
 import { World } from './world.js';
@@ -54,6 +55,8 @@ class Game {
     this.player = new Player(this.scene, this.world);
     this.rivals = makeRivals(this.scene, this.world);
     this.traffic = new Traffic(this.scene);
+    this.people = new People(this.scene);
+    this.traffic.onHonk = (c) => { if (c.pos.distanceTo(this.player.pos) < 25 && this.state === 'race') this.audio.sfx('horn'); };
     this.input = new Input();
     this.audio = new Audio();
     this.audio.setMuted(store.get('muted', false));
@@ -155,6 +158,7 @@ class Game {
     ui.hud.classList.remove('hidden');
     ui.boostBtn.classList.remove('hidden');
     $('brake-btn').classList.remove('hidden');
+    $('kick-btn').classList.remove('hidden');
     this.state = 'countdown';
     this.look.watch = true;
     this.countdown = 3;
@@ -207,9 +211,22 @@ class Game {
       }
     }
 
-    this.traffic.update(dt);
+    this.traffic.update(dt, [this.player, ...this.rivals, ...this.people.crossing()]);
+    const startled = this.people.update(dt, [this.player, ...this.rivals]);
+    if (racing) {
+      for (const b of startled) {
+        this.audio.sfx('hey');
+        if (b.close) {
+          // Clipped a pedestrian: they leap clear, the rider wobbles and the pizza takes a knock.
+          this.player.speed *= 0.6;
+          this.player.heat = Math.max(0, this.player.heat - 4);
+          this.player.crashT = 0.4;
+          this.toast('WATCH IT!', 700);
+        }
+      }
+    }
     this.player.update(dt, this.input, racing);
-    for (const r of this.rivals) r.update(dt, racing);
+    for (const r of this.rivals) r.update(dt, racing, this.player);
 
     if (racing) this.raceLogic(dt);
     this.handleEvents();
@@ -233,19 +250,56 @@ class Game {
     this.raceTime += dt;
     this.timeLeft -= dt;
 
+    // Cars: a real hit shoves the rider away, spins them and cools the pizza. Jumping over is safe.
     const car = this.traffic.hit(p.pos, PLAYER.radius);
     if (car && !this.carCooldown) {
-      p.bump(car.pos.x, car.pos.z, 1);
-      this.carCooldown = 0.6;
+      p.hitBy(car.pos.x, car.pos.z, 8 + p.speed * 0.3 + car.speed * 0.4, 12);
+      this.traffic.struck(car, p.pos.x, p.pos.z);
+      this.audio.sfx('horn');
+      this.shake = 0.6;
+      this.toast('CRASH!', 700);
+      this.carCooldown = 0.8;
     }
     this.carCooldown = Math.max(0, (this.carCooldown || 0) - dt);
 
-    // Shoving rivals: boosting into them knocks them back, otherwise both slow down.
+    // Rivals: shoulder-to-shoulder shoves. Boosting into a rival sends them flying.
     for (const r of this.rivals) {
-      if (r.pos.distanceTo(p.pos) < 2.4 && !r.stun) {
-        r.stun = p.boosting ? 1.6 : 0.6;
-        if (!p.boosting) p.speed *= 0.7;
-        this.audio.sfx('crash');
+      if (r.finished) continue;
+      const c = !r.stun && this.traffic.hit(r.pos, 0.8);
+      if (c) {
+        r.hitBy(c.pos.x, c.pos.z, 9, 1.2);
+        this.traffic.struck(c, r.pos.x, r.pos.z);
+        this.fx.sparks(r.pos, 8);
+      }
+      const dx = r.pos.x - p.pos.x, dz = r.pos.z - p.pos.z;
+      if (Math.hypot(dx, dz) < 1.9 && !r.bumpCd && !p.airborne) {
+        const mid = new THREE.Vector3((r.pos.x + p.pos.x) / 2, p.pos.y, (r.pos.z + p.pos.z) / 2);
+        if (p.boosting) {
+          r.hitBy(p.pos.x, p.pos.z, 15, 1.8);
+          p.hitBy(r.pos.x, r.pos.z, 2, 0, 0.92);
+          this.toast('TAKE THAT!', 700);
+        } else {
+          r.hitBy(p.pos.x, p.pos.z, 7, 0.5);
+          p.hitBy(r.pos.x, r.pos.z, 7, 3, 0.75);
+        }
+        r.bumpCd = 0.6;
+        this.audio.sfx('bump');
+        this.fx.sparks(mid, 10);
+        this.shake = Math.max(this.shake || 0, 0.3);
+      }
+    }
+    this.kicks(dt);
+
+    // Rivals push each other apart.
+    for (let i = 0; i < this.rivals.length; i++) {
+      for (let j = i + 1; j < this.rivals.length; j++) {
+        const a = this.rivals[i].pos, b = this.rivals[j].pos;
+        const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
+        if (d > 0.01 && d < 1.8) {
+          const push = (1.8 - d) / 2;
+          a.x -= dx / d * push; a.z -= dz / d * push;
+          b.x += dx / d * push; b.z += dz / d * push;
+        }
       }
     }
 
@@ -314,9 +368,65 @@ class Game {
       Tips: <b>$${this.lastTips}</b>`;
   }
 
+  // Side kicks, as in Radical Bikers: the player kicks with Z / X (or KICK), rivals riding
+  // alongside kick back. A kick lands if the target is beside the kicker at the peak of the swing.
+  kicks(dt) {
+    const p = this.player;
+    const beside = (a, b) => {
+      const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
+      const h = a.heading;
+      return { lateral: dx * Math.cos(h) - dz * Math.sin(h), along: dx * Math.sin(h) + dz * Math.cos(h) };
+    };
+    const lands = (kicker, target) => {
+      const k = kicker.kick;
+      if (!k || k.hit || k.t < 0.25 || k.t > 0.75 || target.airborne) return false;
+      const { lateral, along } = beside(kicker, target);
+      return lateral * k.side > 0.4 && lateral * k.side < 3.4 && Math.abs(along) < 2.6;
+    };
+
+    let want = this.input.takeKick();
+    if (want !== null && !p.airborne) {
+      if (want === 0) {
+        // Towards the nearest rival, left if nobody is close.
+        let best = null;
+        for (const r of this.rivals) {
+          const d = r.pos.distanceTo(p.pos);
+          if (!r.finished && d < 6 && (!best || d < best.d)) best = { d, side: Math.sign(beside(p, r).lateral) || 1 };
+        }
+        want = best ? best.side : 1;
+      }
+      if (p.startKick(want)) this.audio.sfx('jump');
+    }
+    for (const r of this.rivals) {
+      if (r.finished) continue;
+      if (lands(p, r)) {
+        p.kick.hit = true;
+        r.hitBy(p.pos.x, p.pos.z, 13, 1.5);
+        this.audio.sfx('bump');
+        this.fx.sparks(r.pos, 14);
+        this.shake = 0.3;
+        this.toast('KICK!', 600);
+      }
+      // Rivals kick when the player rides alongside them.
+      const { lateral, along } = beside(r, p);
+      if (!r.kick && !r.stun && Math.abs(lateral) > 0.6 && Math.abs(lateral) < 3 && Math.abs(along) < 2
+          && Math.random() < dt * 1.6 * (r.def.aggression ?? 0.5)) {
+        r.startKick(Math.sign(lateral));
+        r.kickCd = 1.2 + Math.random() * 1.5;
+      }
+      if (lands(r, p)) {
+        r.kick.hit = true;
+        p.hitBy(r.pos.x, r.pos.z, 9, 6, 0.7);
+        this.shake = 0.35;
+        this.toast(`${r.def.name.toUpperCase()} KICKED YOU!`, 800);
+      }
+    }
+  }
+
   handleEvents() {
     for (const e of this.player.events) {
       if (e.type === 'crash') { this.audio.sfx('crash'); this.fx.sparks(this.player.pos); }
+      if (e.type === 'hit') { this.audio.sfx('bump'); this.fx.sparks(this.player.pos, 14); }
       if (e.type === 'jump') this.audio.sfx('jump');
       if (e.type === 'drift') { this.audio.sfx('land'); this.toast('DRIFT! +BOOST'); }
       if (e.type === 'land') {
@@ -349,6 +459,13 @@ class Game {
     const k = 1 - Math.exp(-6 * dt);
     this.camera.position.lerp(want, k);
     this.camera.lookAt(p.pos.x + fx * 6, p.pos.y + 1.5, p.pos.z + fz * 6);
+    // Shake after hits.
+    if (this.shake > 0) {
+      this.shake = Math.max(0, this.shake - dt);
+      const a = this.shake * 0.5;
+      this.camera.position.x += (Math.random() - 0.5) * a;
+      this.camera.position.y += (Math.random() - 0.5) * a;
+    }
     const fov = 65 + (p.boosting ? 12 : 0) + Math.min(8, p.speed * 0.15);
     this.camera.fov += (fov - this.camera.fov) * k;
     this.camera.updateProjectionMatrix();

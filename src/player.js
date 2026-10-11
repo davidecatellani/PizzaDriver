@@ -29,6 +29,10 @@ export class Player {
     this.drift = 0;            // seconds into the current drift
     this.driftYaw = 0;         // visual slide angle
     this.crashT = 0;           // seconds left of the crash flail
+    this.knock = new THREE.Vector2();   // shove velocity from hits, decays
+    this.spin = 0;             // heading wobble from hits, rad/s
+    this.kick = null;          // { side, t, hit } while kicking
+    this.kickCd = 0;
     this.cheer = false;
     this.steer = 0;
     this.sync();
@@ -75,10 +79,13 @@ export class Player {
     this.heading += steer * PLAYER.turnRate * speedFactor * grip * (drifting ? PLAYER.driftTurn : 1) * dt;
     this.lean = THREE.MathUtils.lerp(this.lean, steer * 0.35 * Math.min(1, this.speed / 15), 1 - Math.exp(-8 * dt));
 
+    this.heading += this.spin * dt;
+    this.spin *= Math.exp(-4 * dt);
     const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
     const step = this.speed * dt;
-    this.pos.x += fx * step;
-    this.pos.z += fz * step;
+    this.pos.x += fx * step + this.knock.x * dt;
+    this.pos.z += fz * step + this.knock.y * dt;
+    this.knock.multiplyScalar(Math.exp(-5 * dt));
 
     this.collide();
 
@@ -109,10 +116,12 @@ export class Player {
     }
 
     this.crashT = Math.max(0, this.crashT - dt);
+    this.tickKick(dt);
     this.mesh.userData.rig?.update(dt, {
       speed: Math.min(1, this.speed / PLAYER.maxSpeed), steer: this.steer, air: this.airborne, airTime: this.airTime,
       drift: this.drift > 0, boost: this.boosting && this.speed > 5, crash: this.crashT > 0, cheer: this.cheer,
       kick: active && !this.airborne && this.speed > 0.5 && this.speed < 9 && !input.brake,
+      attack: this.kick,
     });
     this.sync();
   }
@@ -150,14 +159,33 @@ export class Player {
     this.heading = THREE.MathUtils.lerp(this.heading, nearestAngle(this.heading, along), 0.3 * headOn);
   }
 
-  bump(fromX, fromZ, strength = 1) {
-    const dx = this.pos.x - fromX, dz = this.pos.z - fromZ;
-    const d = Math.hypot(dx, dz) || 1;
-    this.pos.x += (dx / d) * 1.5;
-    this.pos.z += (dz / d) * 1.5;
-    this.speed *= 0.35;
-    this.heat = Math.max(0, this.heat - 12 * strength);
-    this.emit('crash', { strength });
+  // Side kick at a neighbour: side 1 = left, -1 = right. Lasts 0.4 s.
+  startKick(side) {
+    if (this.kick || this.kickCd > 0) return false;
+    this.kick = { side, t: 0, hit: false };
+    return true;
+  }
+
+  tickKick(dt) {
+    this.kickCd = Math.max(0, this.kickCd - dt);
+    if (!this.kick) return;
+    this.kick.t += dt / 0.4;
+    if (this.kick.t >= 1) { this.kick = null; this.kickCd = Math.max(this.kickCd, 0.35); }
+  }
+
+  // Knocked by a car or a rival: shoved away from (fromX, fromZ), slowed, spun, and the pizza cools.
+  hitBy(fromX, fromZ, power, heatLoss = 0, slow = 0.35) {
+    const d = new THREE.Vector2(this.pos.x - fromX, this.pos.z - fromZ);
+    if (d.lengthSq() < 1e-4) d.set(Math.cos(this.heading), -Math.sin(this.heading));
+    d.normalize();
+    this.knock.addScaledVector(d, power);
+    this.speed *= slow;
+    // Spin away from the side that was hit.
+    const side = d.x * Math.cos(this.heading) - d.y * Math.sin(this.heading);
+    this.spin += Math.sign(side || 1) * power * 0.25;
+    this.heat = Math.max(0, this.heat - heatLoss);
+    this.crashT = 0.7;
+    this.events.push({ type: 'hit', strength: power });
   }
 
   sync() {

@@ -82,3 +82,8 @@ button:active { transform: translateY(3px); }
   position: fixed; right: 132px; bottom: max(24px, env(safe-area-inset-bottom)); width: 80px; height: 80px;
   border-radius: 50%; background: #ff9f1ccc; color: #5a2a00; border-color: #fff; font-size: 14px; padding: 0;
 }
+
+#kick-btn {
+  position: fixed; right: 40px; bottom: calc(max(24px, env(safe-area-inset-bottom)) + 110px); width: 72px; height: 72px;
+  border-radius: 50%; background: #ff3b2fcc; color: #fff; border-color: #fff; font-size: 14px; padding: 0;
+}

@@ -166,6 +166,17 @@ export class Audio {
       [64, 67, 71, 76, 79, 83, 88].forEach((n, i) => this.fx(NOTE(n), t + i * 0.08, 0.25, 'square', 0.1));
     } else if (name === 'timeout') {
       [64, 60, 55, 52].forEach((n, i) => this.fx(NOTE(n), t + i * 0.15, 0.3, 'sawtooth', 0.12));
+    } else if (name === 'horn') {
+      // Two-tone car horn.
+      for (const f of [392, 494]) this.fx(f, t, 0.35, 'square', 0.06);
+      for (const f of [392, 494]) this.fx(f, t + 0.42, 0.25, 'square', 0.05);
+    } else if (name === 'bump') {
+      this.noiseHit(t, 0.18, 0.7, 'lowpass', 300, this.master);
+      this.fx(110, t, 0.12, 'triangle', 0.25);
+      this.noiseHit(t + 0.02, 0.12, 0.25, 'bandpass', 2500, this.master);
+    } else if (name === 'hey') {
+      this.fx(NOTE(81), t, 0.08, 'sine', 0.12);
+      this.fx(NOTE(88), t + 0.09, 0.12, 'sine', 0.12);
     } else if (name === 'tick') {
       this.fx(NOTE(96), t, 0.05, 'square', 0.08);
     }

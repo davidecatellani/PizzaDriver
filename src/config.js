@@ -68,7 +68,7 @@ export const DELIVERIES = [
 ];
 
 export const RIVALS = [
-  { name: 'Gino', color: 0x2e9d4a, speed: 0.80 },
-  { name: 'Lola', color: 0x8a3fd1, speed: 0.86 },
-  { name: 'Tony', color: 0xe08a1e, speed: 0.92 },
+  { name: 'Gino', color: 0x2e9d4a, speed: 0.83, aggression: 0.6 },
+  { name: 'Lola', color: 0x8a3fd1, speed: 0.89, aggression: 0.4 },
+  { name: 'Tony', color: 0xe08a1e, speed: 0.95, aggression: 0.85 },
 ];
