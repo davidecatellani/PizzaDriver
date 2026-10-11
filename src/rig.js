@@ -107,6 +107,7 @@ function skin(pos, m, index) {
   const { sx, sy, maxX, tipY, H, neckY, hipY, kneeY } = m;
   const skinIndex = new Uint16Array(pos.count * 4);
   const skinWeight = new Float32Array(pos.count * 4);
+  const cloth = new Float32Array(pos.count);   // 1 on the shirt (torso and upper arms), for recolouring
   const v = new THREE.Vector3();
   const spineY = hipY + 0.08 * H, chestY = sy - 0.12 * H;
   const torso = m.seated ? 'root' : 'chest';
@@ -149,11 +150,15 @@ function skin(pos, m, index) {
       add('chest', a * b);
     }
 
+    cloth[i] = ['chest', 'spine', 'armL', 'armR', 'foreL', 'foreR'].reduce((c, b) => c + (w.get(b) || 0), 0)
+      // The shirt can hang below the hip line on cartoon proportions; the shader keeps the jeans by colour.
+      + (m.seated ? 0 : (1 - [...['armL', 'armR', 'foreL', 'foreR', 'handL', 'handR', 'head']].reduce((c, b) => c + (w.get(b) || 0), 0))
+        * smooth(kneeY + 0.06 * H, kneeY + 0.1 * H, v.y) * (v.y < spineY ? 1 : 0));
     const top = [...w.entries()].sort((p, q) => q[1] - p[1]).slice(0, 4);
     const sum = top.reduce((s, e) => s + e[1], 0) || 1;
     top.forEach(([b, x], j) => { skinIndex[i * 4 + j] = index[b]; skinWeight[i * 4 + j] = x / sum; });
   }
-  return { skinIndex, skinWeight };
+  return { skinIndex, skinWeight, cloth };
 }
 
 // Replaces the single mesh inside `obj` (a makeObject wrapper child) with a rigged SkinnedMesh.
@@ -174,7 +179,8 @@ export function rigModel(obj) {
     const marks = landmarks(geometry.attributes.position);
     const defs = boneDefs(marks);
     const index = Object.fromEntries(defs.map((d, i) => [d[0], i]));
-    const { skinIndex, skinWeight } = skin(geometry.attributes.position, marks, index);
+    const { skinIndex, skinWeight, cloth } = skin(geometry.attributes.position, marks, index);
+    geometry.setAttribute('cloth', new THREE.Float32BufferAttribute(cloth, 1));
     geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndex, 4));
     geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeight, 4));
     entry = { geometry, marks, defs };
@@ -199,7 +205,9 @@ export function rigModel(obj) {
   mesh.parent.remove(mesh);
   model.updateMatrixWorld(true);
   skinned.bind(new THREE.Skeleton(list));
-  return new Rig(model, bones, entry.marks);
+  const rig = new Rig(model, bones, entry.marks);
+  rig.mesh = skinned;
+  return rig;
 }
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();

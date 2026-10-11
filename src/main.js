@@ -13,6 +13,8 @@ import { Traffic } from './traffic.js';
 import { Input } from './input.js';
 import { Audio } from './audio.js';
 import * as SDK from './sdk.js';
+import { Profile } from './shop.js';
+import { Garage } from './garage.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -67,6 +69,9 @@ class Game {
     this.state = 'menu';
     this.lastAd = performance.now() / 1000;
     this.totalTips = store.get('tips', 0);
+    this.profile = new Profile(store);
+    this.player.equip(this.profile);
+    this.garage = new Garage(this, this.profile);
     this.deliveryIndex = store.get('delivery', 0) % DELIVERIES.length;
     this.showTotal();
     this.resetRace();
@@ -103,6 +108,23 @@ class Game {
       this.resetRace();
       this.startRace();
     };
+    // The garage opens from the menu and from the delivery screen, and returns to it.
+    for (const [id, screen] of [['garage-btn', ui.menu], ['garage-btn2', ui.delivered]]) {
+      $(id).onclick = () => {
+        const back = this.state;
+        this.show(null);
+        this.state = 'garage';
+        this.garageT = 0;
+        // Rivals park out of shot while the camera circles the player.
+        for (const r of this.rivals) r.mesh.visible = false;
+        this.garage.show(() => {
+          for (const r of this.rivals) r.mesh.visible = true;
+          this.state = back;
+          this.show(screen);
+          this.showTotal();
+        });
+      };
+    }
     ui.muteBtn.onclick = () => this.toggleMute();
     addEventListener('keydown', (e) => {
       if (e.code === 'KeyM') this.toggleMute();
@@ -172,6 +194,12 @@ class Game {
 
   addTips(n) {
     this.totalTips += n;
+    store.set('tips', this.totalTips);
+    this.showTotal();
+  }
+
+  spendTips(n) {
+    this.totalTips -= n;
     store.set('tips', this.totalTips);
     this.showTotal();
   }
@@ -486,6 +514,19 @@ class Game {
 
   updateCamera(dt) {
     const p = this.player;
+    if (this.state === 'garage') {
+      // Slow turntable round the rider, who stands clear of the shop panel.
+      this.garageT += dt;
+      const a = p.heading + 0.6 + Math.sin(this.garageT * 0.4) * 0.9;
+      const cam = this.camera;
+      cam.position.set(p.pos.x + Math.sin(a) * 4.6, p.pos.y + 1.9, p.pos.z + Math.cos(a) * 4.6);
+      const portrait = innerHeight > innerWidth;
+      const right = new THREE.Vector3(Math.cos(a), 0, -Math.sin(a));
+      const target = new THREE.Vector3(p.pos.x, p.pos.y + (portrait ? -0.4 : 1.1), p.pos.z);
+      if (!portrait) target.addScaledVector(right, 1.6);
+      cam.lookAt(target);
+      return;
+    }
     const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
     const want = new THREE.Vector3(p.pos.x - fx * 9, p.pos.y + 4.5, p.pos.z - fz * 9);
     const k = 1 - Math.exp(-6 * dt);

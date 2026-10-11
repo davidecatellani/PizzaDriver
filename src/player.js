@@ -8,10 +8,22 @@ const LIMIT_MAX = GRID * CELL + STREET / 2 - PLAYER.radius;
 export class Player {
   constructor(scene, world) {
     this.world = world;
+    this.scene = scene;
+    this.S = { ...PLAYER, heatLoss: 1, mass: 1, float: 0 };   // tuning for the current ride (see equip)
     this.mesh = makeRider();
     scene.add(this.mesh);
+    this.t = 0;
     this.events = [];
     this.reset(0, 0, 0);
+  }
+
+  // Swap in the garage's ride, style and upgrades (src/shop.js Profile).
+  equip(profile) {
+    this.S = profile.stats();
+    this.scene.remove(this.mesh);
+    this.mesh = makeRider(0xffffff, 0xd62828, 'rider', profile.look());
+    this.scene.add(this.mesh);
+    this.sync();
   }
 
   reset(x, z, heading) {
@@ -67,35 +79,35 @@ export class Player {
     const wantBoost = active && this.turbo > 0 && !this.airborne;
     this.boosting = wantBoost;
     if (wantBoost) this.turbo = Math.max(0, this.turbo - dt);
-    this.boost = this.turbo / PLAYER.turboMax;
+    this.boost = this.turbo / this.S.turboMax;
 
     // Drift: braking while steering at speed slides the scooter round a corner instead of stopping it.
     // A drift held long enough banks some turbo when it ends.
-    const drifting = active && input.brake && Math.abs(steer) > 0.3 && this.speed > PLAYER.driftMinSpeed && !this.airborne;
+    const drifting = active && input.brake && Math.abs(steer) > 0.3 && this.speed > this.S.driftMinSpeed && !this.airborne;
     if (drifting) {
       this.drift += dt;
     } else if (this.drift > 0) {
-      if (this.drift > PLAYER.driftBoostAfter) {
-        this.addTurbo(PLAYER.driftBoost);
+      if (this.drift > this.S.driftBoostAfter) {
+        this.addTurbo(this.S.driftBoost);
         this.emit('drift', { time: this.drift });
       }
       this.drift = 0;
     }
     this.driftYaw = THREE.MathUtils.lerp(this.driftYaw, drifting ? steer * 0.5 : 0, 1 - Math.exp(-10 * dt));
 
-    const max = PLAYER.maxSpeed * (wantBoost ? PLAYER.boostMultiplier : 1);
-    if (!active) this.speed = Math.max(0, this.speed - PLAYER.brake * dt);
-    else if (drifting) this.speed = Math.max(0, this.speed - PLAYER.driftDrag * dt);
-    else if (input.brake && this.speed > 0.5) this.speed = Math.max(0, this.speed - PLAYER.brake * dt);
-    else if (input.brake) this.speed = Math.max(-PLAYER.reverse, this.speed - 12 * dt);   // back up
-    else if (this.speed < max) this.speed = Math.min(max, this.speed + PLAYER.accel * (wantBoost ? 2 : 1) * (this.speed < 0 ? 3 : 1) * dt);
-    else this.speed = Math.max(max, this.speed - PLAYER.accel * 0.5 * dt);
+    const max = this.S.maxSpeed * (wantBoost ? this.S.boostMultiplier : 1);
+    if (!active) this.speed = Math.max(0, this.speed - this.S.brake * dt);
+    else if (drifting) this.speed = Math.max(0, this.speed - this.S.driftDrag * dt);
+    else if (input.brake && this.speed > 0.5) this.speed = Math.max(0, this.speed - this.S.brake * dt);
+    else if (input.brake) this.speed = Math.max(-this.S.reverse, this.speed - 12 * dt);   // back up
+    else if (this.speed < max) this.speed = Math.min(max, this.speed + this.S.accel * (wantBoost ? 2 : 1) * (this.speed < 0 ? 3 : 1) * dt);
+    else this.speed = Math.max(max, this.speed - this.S.accel * 0.5 * dt);
 
     // Steering gets slightly tighter at low speed; much weaker in the air.
     const grip = this.airborne ? 0.25 : 1;
     // Some steering even at a standstill, so a rider stuck against something can always turn away.
-    const speedFactor = THREE.MathUtils.clamp(Math.abs(this.speed) / 8, 0.45, 1) * (1.1 - 0.2 * (Math.abs(this.speed) / (PLAYER.maxSpeed * 1.5)));
-    this.heading += Math.sign(this.speed || 1) * steer * PLAYER.turnRate * speedFactor * grip * (drifting ? PLAYER.driftTurn : 1) * dt;
+    const speedFactor = THREE.MathUtils.clamp(Math.abs(this.speed) / 8, 0.45, 1) * (1.1 - 0.2 * (Math.abs(this.speed) / (this.S.maxSpeed * 1.5)));
+    this.heading += Math.sign(this.speed || 1) * steer * this.S.turnRate * speedFactor * grip * (drifting ? this.S.driftTurn : 1) * dt;
     this.lean = THREE.MathUtils.lerp(this.lean, steer * 0.35 * Math.min(1, this.speed / 15), 1 - Math.exp(-8 * dt));
 
     this.heading += this.spin * dt;
@@ -112,7 +124,7 @@ export class Player {
     const ground = this.world.groundHeight(this.pos.x, this.pos.z);
     if (this.airborne) {
       this.airTime += dt;
-      this.vy -= PLAYER.gravity * dt;
+      this.vy -= this.S.gravity * dt;
       this.pos.y += this.vy * dt;
       if (this.pos.y <= ground) {
         this.pos.y = ground;
@@ -123,11 +135,11 @@ export class Player {
         if (this.airTime > 0.35) {
           let gained = 0;
           if (clean) {
-            gained = PLAYER.turboLanding + this.airTime * PLAYER.turboPerAir + (this.trickDone ? PLAYER.turboTrick : 0);
+            gained = this.S.turboLanding + this.airTime * this.S.turboPerAir + (this.trickDone ? this.S.turboTrick : 0);
             this.addTurbo(gained);
           }
           this.emit('land', { clean, airTime: this.airTime, trick: this.trickDone, gained, wipeout: midTrick });
-          if (midTrick) { this.speed *= 0.3; this.crashT = 0.9; this.heat = Math.max(0, this.heat - 6); }
+          if (midTrick) { this.speed *= 0.3; this.crashT = 0.9; this.heat = Math.max(0, this.heat - 6 * this.S.heatLoss); }
         }
         this.trick = null;
         this.trickDone = false;
@@ -136,7 +148,7 @@ export class Player {
     } else if (ground < this.pos.y - 0.05 && step > 0) {
       // Left the top of a ramp: launch along the ramp slope.
       // Leaving the ramp in a wheelie launches higher.
-      this.vy = Math.max(4, this.slope * this.speed * 1.3) * (this.wheelie > 0.5 ? PLAYER.wheelieJump : 1);
+      this.vy = Math.max(4, this.slope * this.speed * 1.3) * (this.wheelie > 0.5 ? this.S.wheelieJump : 1);
       this.airborne = true;
       this.trick = null;
       this.trickDone = false;
@@ -150,12 +162,12 @@ export class Player {
     this.crashT = Math.max(0, this.crashT - dt);
     this.tickKick(dt);
     this.mesh.userData.rig?.update(dt, {
-      speed: Math.min(1, this.speed / PLAYER.maxSpeed), steer: this.steer, air: this.airborne, airTime: this.airTime,
+      speed: Math.min(1, this.speed / this.S.maxSpeed), steer: this.steer, air: this.airborne, airTime: this.airTime,
       drift: this.drift > 0, boost: this.boosting && this.speed > 5, crash: this.crashT > 0, cheer: this.cheer,
-      kick: active && !this.airborne && this.speed > 0.5 && this.speed < 9 && !input.brake,
+      kick: this.S.push !== false && active && !this.airborne && this.speed > 0.5 && this.speed < 9 && !input.brake,
       attack: this.kick, trick: this.trick ? this.trick.t : 0,
     });
-    this.sync();
+    this.sync(dt);
   }
 
   collide() {
@@ -195,7 +207,7 @@ export class Player {
   }
 
   addTurbo(s) {
-    this.turbo = Math.min(PLAYER.turboMax, this.turbo + s);
+    this.turbo = Math.min(this.S.turboMax, this.turbo + s);
   }
 
   // Hitting a wall: lose speed and pizza heat, and glance off along the wall.
@@ -203,7 +215,7 @@ export class Player {
     const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
     const headOn = axis === 'x' ? Math.abs(fx) : Math.abs(fz);
     if (this.speed > 10 && headOn > 0.5) {
-      this.heat = Math.max(0, this.heat - 8 * headOn);
+      this.heat = Math.max(0, this.heat - 8 * headOn * this.S.heatLoss);
       this.emit('crash', { strength: headOn });
     }
     this.speed *= 1 - 0.7 * headOn;
@@ -231,19 +243,32 @@ export class Player {
     const d = new THREE.Vector2(this.pos.x - fromX, this.pos.z - fromZ);
     if (d.lengthSq() < 1e-4) d.set(Math.cos(this.heading), -Math.sin(this.heading));
     d.normalize();
+    power /= this.S.mass;   // a heavy e-bike is harder to shove
     this.knock.addScaledVector(d, power);
     this.speed *= slow;
     // Spin away from the side that was hit.
     const side = d.x * Math.cos(this.heading) - d.y * Math.sin(this.heading);
     this.spin += Math.sign(side || 1) * power * 0.25;
-    this.heat = Math.max(0, this.heat - heatLoss);
+    this.heat = Math.max(0, this.heat - heatLoss * this.S.heatLoss);
     this.crashT = 0.7;
     this.events.push({ type: 'hit', strength: power });
   }
 
-  sync() {
+  sync(dt = 0) {
+    this.t += dt;
     this.mesh.position.copy(this.pos);
     this.mesh.position.y += 0.45 * this.wheelie;
+    const ride = this.mesh.userData.ride;
+    if (ride) {
+      for (const w of ride.wheels) w.rotation.x += this.speed * dt / ride.wheelR;
+      if (this.S.float) {
+        // Hovering: bob above the road; the halo stays on the ground below.
+        const lift = this.S.float + 0.06 * Math.sin(this.t * 5);
+        this.mesh.position.y += lift;
+        ride.halo.position.y = 0.03 - lift - (this.airborne ? this.pos.y - this.world.groundHeight(this.pos.x, this.pos.z) : 0);
+        ride.halo.material.opacity = 0.35 / (1 + Math.max(0, -ride.halo.position.y - lift) * 0.5);
+      }
+    }
     this.mesh.rotation.set(0, this.heading + this.driftYaw, 0);
     this.mesh.rotateZ(-this.lean);
     // Kicking: the whole rider leans away from the kick.

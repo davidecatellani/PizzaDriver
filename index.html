@@ -33,6 +33,7 @@
     <h1>PIZZA<br />DRIVER</h1>
     <p id="subtitle" class="sub">Napoli</p>
     <button id="play-btn" class="big">RIDE!</button>
+    <button id="garage-btn" class="garage-open">GARAGE</button>
     <p class="hint desktop-only">← → steer · ↓ brake / reverse (hold while steering to drift) · SPACE wheelie, trick in the air · jump ramps for TURBO · Z / X kick · M mute</p>
     <p class="hint touch-only">Hold left / right to steer · DRIFT while steering · TRICK for wheelies and air spins · jump ramps for TURBO · KICK the rivals</p>
     <p id="total-tips" class="tips"></p>
@@ -52,6 +53,26 @@
     <div id="result" class="result"></div>
     <button id="double-btn" class="big ad">▶ DOUBLE TIPS</button>
     <button id="next-btn">Next delivery</button>
+    <button id="garage-btn2" class="garage-open">GARAGE</button>
+  </div>
+
+  <div id="garage" class="garage hidden">
+    <div class="g-panel">
+      <div class="g-head">
+        <h2>GARAGE</h2>
+        <div class="g-tips">$<span id="g-tips">0</span></div>
+      </div>
+      <div class="g-tabs">
+        <button data-tab="rides" class="on">RIDES</button>
+        <button data-tab="upgrades">UPGRADES</button>
+        <button data-tab="style">STYLE</button>
+      </div>
+      <div id="g-list" class="g-list"></div>
+      <div class="g-foot">
+        <button id="g-free" class="ad">▶ FREE TIPS +$<span id="g-free-n">40</span></button>
+        <button id="g-close" class="big">DONE</button>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="./src/main.js"></script>
