@@ -89,9 +89,11 @@ class Game {
     this.deliveryAt = store.get('deliveryAt', { napoli: store.get('delivery', 0) });
     this.ownedCities = store.get('cities', ['napoli']);
     this.deliveryIndex = (this.deliveryAt[this.cityId] || 0) % this.city.deliveries.length;
+    this.menuCity = CITIES.indexOf(this.city);
     this.showTotal();
     this.resetRace();
     this.bindUI();
+    this.showCity();
     this.showName();
     if (!this.playerName) this.askName();
     addEventListener('resize', () => this.resize());
@@ -101,7 +103,9 @@ class Game {
   }
 
   bindUI() {
-    $('play-btn').onclick = () => this.startRace();
+    $('play-btn').onclick = () => this.play();
+    $('city-prev').onclick = () => this.pickCity(-1);
+    $('city-next').onclick = () => this.pickCity(1);
     $('retry-btn').onclick = () => { this.resetRace(); this.startRace(); };
     $('continue-btn').onclick = () => this.rewarded(() => {
       this.timeLeft = RACE.continueBonus;
@@ -142,6 +146,7 @@ class Game {
           this.state = back;
           this.show(screen);
           this.showTotal();
+          this.showCity();
         });
       };
     }
@@ -160,7 +165,9 @@ class Game {
     ui.muteBtn.onclick = () => this.toggleMute();
     addEventListener('keydown', (e) => {
       if (e.code === 'KeyM') this.toggleMute();
-      if (this.state === 'menu' && (e.code === 'Enter' || e.code === 'Space')) this.startRace();
+      if (this.state === 'menu' && (e.code === 'Enter' || e.code === 'Space')) this.play();
+      if (this.state === 'menu' && e.code === 'ArrowLeft') this.pickCity(-1);
+      if (this.state === 'menu' && e.code === 'ArrowRight') this.pickCity(1);
     });
   }
 
@@ -225,11 +232,56 @@ class Game {
     this.lastTick = 99;
     this.world.checkpoints.forEach((c, i) => { c.mesh.visible = i === 0; });
     this.world.customerBeam.visible = false;
-    ui.subtitle.textContent = `${this.city.name} · Delivery ${this.deliveryIndex + 1}/${this.city.deliveries.length}: ${d.name}`;
+    this.subtitleText = `Delivery ${this.deliveryIndex + 1}/${this.city.deliveries.length}: ${d.name}`;
+    ui.subtitle.textContent = this.subtitleText;
     const best = this.records[this.recordKey];
     $('record-line').textContent = best ? `🏆 Record: ${clock(best)}` : '';
     $('hud-best').textContent = best ? `BEST ${clock(best)}` : '';
     this.updateCamera(1);
+  }
+
+  // --- City choice on the menu: owned cities load straight away, locked ones show their price.
+
+  get menuCityDef() { return CITIES[this.menuCity]; }
+
+  showCity() {
+    const c = this.menuCityDef, owned = this.ownedCities.includes(c.id);
+    const el = $('city-name');
+    el.classList.toggle('locked', !owned);
+    el.innerHTML = owned ? `${c.name}<small>${c.tagline}</small>` : `🔒 ${c.name}<small>Unlock for $${c.price} tips · ${c.tagline}</small>`;
+    $('play-btn').textContent = owned ? 'RIDE!' : `UNLOCK $${c.price}`;
+    $('play-btn').disabled = !owned && this.totalTips < c.price;
+    ui.subtitle.textContent = owned ? this.subtitleText : `You have $${this.totalTips}`;
+    $('record-line').classList.toggle('hidden', !owned);
+  }
+
+  pickCity(step) {
+    this.menuCity = (this.menuCity + step + CITIES.length) % CITIES.length;
+    if (this.ownedCities.includes(this.menuCityDef.id)) this.switchCity(this.menuCityDef.id);
+    this.showCity();
+  }
+
+  switchCity(id) {
+    if (id === this.cityId) return;
+    this.cityId = id;
+    store.set('city', id);
+    this.buildCity();
+    this.deliveryIndex = (this.deliveryAt[id] || 0) % this.city.deliveries.length;
+    this.resetRace();
+  }
+
+  // RIDE! on an owned city; on a locked one, buy it with tips and go there.
+  play() {
+    const c = this.menuCityDef;
+    if (this.ownedCities.includes(c.id)) return this.startRace();
+    if (this.totalTips < c.price) return;
+    this.spendTips(c.price);
+    this.ownedCities.push(c.id);
+    store.set('cities', this.ownedCities);
+    this.audio.sfx('checkpoint');
+    this.switchCity(c.id);
+    this.showCity();
+    this.toast(`${c.name.toUpperCase()} UNLOCKED!`, 1600);
   }
 
   get recordKey() { return `${this.cityId}:${this.deliveryIndex}`; }

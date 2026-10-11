@@ -60,3 +60,65 @@ export function paint(geo, color) {
 export function seeded(seed) {
   return () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 }
+
+// A box geometry turned about y by `rotY` (and tilted about x by `rotX`) at (x, y, z), painted.
+export function turnedBox(w, h, d, x, y, z, color, rotY = 0, rotX = 0) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  if (rotX) geo.rotateX(rotX);
+  if (rotY) geo.rotateY(rotY);
+  geo.translate(x, y, z);
+  return paint(geo, color);
+}
+
+// Leafy trees as two instanced meshes (trunks, crowns). `spots`: [{x, z, s}] with s a size scale.
+export function addTrees(scene, spots, { trunk = 0x5a4632, leaf = 0x4f7a34, height = 6, seed = 5 } = {}) {
+  const rnd = seeded(seed);
+  const trunkGeo = new THREE.CylinderGeometry(0.16, 0.26, height * 0.55, 6).translate(0, height * 0.275, 0);
+  const crownGeo = new THREE.IcosahedronGeometry(1, 1);
+  const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: trunk, roughness: 1 }), spots.length);
+  const crowns = new THREE.InstancedMesh(crownGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, flatShading: true }), spots.length * 3);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), base = new THREE.Color(leaf), c = new THREE.Color();
+  spots.forEach((p, i) => {
+    const s = p.s ?? 1;
+    m4.compose(new THREE.Vector3(p.x, 0.3, p.z), q, new THREE.Vector3(s, s, s));
+    trunks.setMatrixAt(i, m4);
+    for (let k = 0; k < 3; k++) {
+      const r = height * 0.3 * s * (0.8 + rnd() * 0.4);
+      const off = new THREE.Vector3((rnd() - 0.5) * r, height * 0.62 * s + (rnd() - 0.2) * r * 0.6, (rnd() - 0.5) * r);
+      q.setFromEuler(new THREE.Euler(rnd(), rnd() * 6, 0));
+      m4.compose(off.add(new THREE.Vector3(p.x, 0.3, p.z)), q, new THREE.Vector3(r, r * 0.85, r));
+      crowns.setMatrixAt(i * 3 + k, m4);
+      crowns.setColorAt(i * 3 + k, c.copy(base).offsetHSL((rnd() - 0.5) * 0.04, 0, (rnd() - 0.5) * 0.12));
+    }
+    q.identity();
+  });
+  trunks.castShadow = crowns.castShadow = true;
+  crowns.receiveShadow = true;
+  scene.add(trunks, crowns);
+}
+
+// Flat textured ground patch (grass, gravel, a square) at height y.
+export function patch(scene, minX, maxX, minZ, maxZ, y, material, tile) {
+  const geo = new THREE.PlaneGeometry(maxX - minX, maxZ - minZ);
+  geo.rotateX(-Math.PI / 2);
+  geo.translate((minX + maxX) / 2, y, (minZ + maxZ) / 2);
+  worldUVs(geo, tile);
+  const m = new THREE.Mesh(geo, material);
+  m.receiveShadow = true;
+  scene.add(m);
+  return m;
+}
+
+// Soft see-through sheets hanging across an opening, that riders pass straight through
+// (laundry, construction netting, market tarps). `across` 'x' or 'z' is the direction the row runs.
+export function curtain(scene, cx, cz, across, width, height, colors, { y = 0.3, opacity = 1 } = {}) {
+  const n = Math.max(2, Math.round(width / 1.8)), pw = width / n;
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(pw * 0.97, height),
+      new THREE.MeshStandardMaterial({ color: colors[i % colors.length], side: THREE.DoubleSide, roughness: 1, transparent: opacity < 1, opacity }));
+    const t = -width / 2 + pw * (i + 0.5);
+    if (across === 'x') m.position.set(cx + t, y + height / 2, cz);
+    else { m.position.set(cx, y + height / 2, cz + t); m.rotation.y = Math.PI / 2; }
+    scene.add(m);
+  }
+}

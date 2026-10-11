@@ -239,3 +239,270 @@ export function laundry() {
   grain(g, 256, 64, 0.08, 2);
   return toTexture(c, { repeat: false });
 }
+
+// --- New York and Paris ---
+
+// Asphalt: dark, fine-grained, with patched repairs and cracks. One tile = 4 m.
+export function asphalt(tone = 34) {
+  const S = 512;
+  const [c, g] = canvas(S);
+  const [hc, hg] = canvas(S);
+  g.fillStyle = `hsl(220, 3%, ${tone}%)`;
+  g.fillRect(0, 0, S, S);
+  hg.fillStyle = '#808080';
+  hg.fillRect(0, 0, S, S);
+  grain(g, S, S, 0.16, 2);
+  grain(hg, S, S, 0.5, 2);
+  // Hairline cracks.
+  g.strokeStyle = 'rgba(0,0,0,0.35)';
+  hg.strokeStyle = '#303030';
+  for (let k = 0; k < 14; k++) {
+    let x = rnd() * S, y = rnd() * S;
+    g.lineWidth = hg.lineWidth = 1 + rnd() * 1.5;
+    g.beginPath(); hg.beginPath(); g.moveTo(x, y); hg.moveTo(x, y);
+    for (let s = 0; s < 6; s++) { x += (rnd() - 0.5) * 40; y += (rnd() - 0.5) * 40; g.lineTo(x, y); hg.lineTo(x, y); }
+    g.stroke(); hg.stroke();
+  }
+  return { map: toTexture(c), normalMap: normalMap(hc, 1.2) };
+}
+
+// Concrete pavement slabs (New York) or pale stone (Paris). One tile = 2 m.
+export function slabs(base = '#a9a7a2', joint = 'rgba(0,0,0,0.28)') {
+  const S = 256;
+  const [c, g] = canvas(S);
+  const [hc, hg] = canvas(S);
+  g.fillStyle = base; g.fillRect(0, 0, S, S);
+  hg.fillStyle = '#c0c0c0'; hg.fillRect(0, 0, S, S);
+  grain(g, S, S, 0.1, 2);
+  g.fillStyle = joint; hg.fillStyle = '#000';
+  for (const v of [0, S / 2]) { g.fillRect(v, 0, 3, S); g.fillRect(0, v, S, 3); hg.fillRect(v, 0, 3, S); hg.fillRect(0, v, S, 3); }
+  // A few chewing-gum spots and stains.
+  for (let k = 0; k < 18; k++) { g.fillStyle = `rgba(30,30,30,${0.1 + rnd() * 0.15})`; g.beginPath(); g.arc(rnd() * S, rnd() * S, 1 + rnd() * 3, 0, 7); g.fill(); }
+  return { map: toTexture(c), normalMap: normalMap(hc, 1.5) };
+}
+
+// Curtain-wall glass: one bay is one storey of a tower. Variants: blue, green, bronze, silver.
+export function glass(variant) {
+  const S = 128;
+  const [c, g] = canvas(S);
+  const tint = [['#9cc3e0', '#2d4f6e', '#18293a'], ['#a7d8cf', '#2d6660', '#173a36'], ['#e3c9a0', '#6e5537', '#2e2418'], ['#d6dde3', '#5b6670', '#272c31']][variant % 4];
+  const grad = g.createLinearGradient(0, 0, S * 0.6, S);
+  grad.addColorStop(0, tint[0]); grad.addColorStop(0.5, tint[1]); grad.addColorStop(1, tint[2]);
+  g.fillStyle = grad; g.fillRect(0, 0, S, S);
+  // A lit office behind some panes.
+  if (rnd() < 0.5) { g.fillStyle = 'rgba(255,240,200,0.18)'; g.fillRect(8, 30, 50, 70); }
+  // Mullions and the spandrel band at the floor.
+  g.fillStyle = variant === 2 ? '#3a2c1c' : '#c9d0d6';
+  g.fillRect(0, 0, 4, S); g.fillRect(S / 2 - 2, 0, 4, S);
+  g.fillRect(0, S - 22, S, 22);
+  g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, S - 22, S, 3);
+  const map = toTexture(c);
+  return { map };
+}
+
+// A brick walk-up's bay: tinted brick with a white sash window under a stone lintel.
+export function brick(variant) {
+  const S = 256;
+  const [c, g] = canvas(S);
+  const [hc, hg] = canvas(S);
+  g.fillStyle = '#b8b0a8'; g.fillRect(0, 0, S, S);          // mortar
+  hg.fillStyle = '#000'; hg.fillRect(0, 0, S, S);
+  const bh = 6, bw = 15;
+  for (let y = 0, r = 0; y < S; y += bh, r++) {
+    for (let x = r % 2 ? -bw / 2 : 0; x < S; x += bw) {
+      const l = 82 + rnd() * 18;
+      g.fillStyle = `hsl(0, 0%, ${l}%)`;
+      g.fillRect(x + 1, y + 1, bw - 2, bh - 2);
+      hg.fillStyle = '#c0c0c0';
+      hg.fillRect(x + 1, y + 1, bw - 2, bh - 2);
+    }
+  }
+  grain(g, S, S, 0.1, 2);
+  const ww = 84, wh = 132, wx = (S - ww) / 2, wy = 58;
+  // Lintel and sill in pale stone.
+  g.fillStyle = variant === 1 ? '#3a3a3a' : '#e8e2d6';
+  g.fillRect(wx - 10, wy - 16, ww + 20, 16);
+  g.fillStyle = '#e8e2d6';
+  g.fillRect(wx - 8, wy + wh, ww + 16, 10);
+  hg.fillStyle = '#ffffff'; hg.fillRect(wx - 10, wy - 16, ww + 20, 16); hg.fillRect(wx - 8, wy + wh, ww + 16, 10);
+  // Two-over-two sash window.
+  const glassG = g.createLinearGradient(wx, wy, wx + ww, wy + wh);
+  glassG.addColorStop(0, '#6f8ca3'); glassG.addColorStop(0.5, '#273443'); glassG.addColorStop(1, '#151b22');
+  g.fillStyle = glassG; g.fillRect(wx, wy, ww, wh);
+  hg.fillStyle = '#202020'; hg.fillRect(wx, wy, ww, wh);
+  g.fillStyle = variant === 2 ? '#2f5d3a' : '#f2f0ea';
+  g.fillRect(wx, wy, ww, 5); g.fillRect(wx, wy + wh - 5, ww, 5); g.fillRect(wx, wy, 5, wh); g.fillRect(wx + ww - 5, wy, 5, wh);
+  g.fillRect(wx, wy + wh / 2 - 3, ww, 6); g.fillRect(wx + ww / 2 - 2, wy, 4, wh);
+  // An air conditioner in some windows.
+  if (variant === 0) { g.fillStyle = '#d9d9d4'; g.fillRect(wx + 10, wy + wh / 2 + 6, 44, 28); g.fillStyle = '#8a8a86'; for (let y = 0; y < 24; y += 5) g.fillRect(wx + 14, wy + wh / 2 + 9 + y, 36, 2); }
+  return { map: toTexture(c), normalMap: normalMap(hc, 2) };
+}
+
+// New York ground floors: shop windows under coloured awnings, steel shutters.
+export function storefrontNY() {
+  const S = 256;
+  const [c, g] = canvas(S);
+  g.fillStyle = '#2a2a2c'; g.fillRect(0, 0, S, S);
+  const cols = ['#c8302c', '#1f5f3a', '#1d3f7a', '#e3a21a', '#5a2a6e'];
+  const col = cols[Math.floor(rnd() * cols.length)];
+  // Sign band, awning, window, door.
+  g.fillStyle = col; g.fillRect(0, 20, S, 46);
+  g.fillStyle = 'rgba(255,255,255,0.9)'; g.font = 'bold 30px sans-serif'; g.textAlign = 'center';
+  g.fillText(['DELI', 'PIZZA', 'NAILS', 'DINER', 'BAGELS', 'HARDWARE'][Math.floor(rnd() * 6)], S / 2, 56);
+  const lit = g.createLinearGradient(0, 80, 0, S);
+  lit.addColorStop(0, '#fff2c8'); lit.addColorStop(1, '#a8743a');
+  g.fillStyle = lit; g.fillRect(12, 86, 150, 150);
+  g.fillStyle = '#6d7277'; g.fillRect(176, 86, 66, 170);
+  g.fillStyle = 'rgba(0,0,0,0.3)'; for (let y = 90; y < S; y += 7) g.fillRect(176, y, 66, 2);
+  g.fillStyle = '#111'; g.fillRect(12, 160, 150, 4); g.fillRect(85, 86, 4, 150);
+  return { map: toTexture(c) };
+}
+
+// A Haussmann bay in Paris limestone: a tall French window with a wrought-iron guard,
+// stone joints, a carved surround. Variants differ in the window head and the railing.
+export function haussmann(variant) {
+  const S = 256;
+  const [c, g] = canvas(S);
+  const [hc, hg] = canvas(S);
+  g.fillStyle = '#f3ecdf'; g.fillRect(0, 0, S, S);
+  hg.fillStyle = '#909090'; hg.fillRect(0, 0, S, S);
+  grain(g, S, S, 0.06, 3);
+  // Horizontal stone courses.
+  g.fillStyle = 'rgba(120,100,70,0.22)'; hg.fillStyle = '#505050';
+  for (let y = 0; y < S; y += 32) { g.fillRect(0, y, S, 2); hg.fillRect(0, y, S, 2); }
+  const ww = 70, wh = 150, wx = (S - ww) / 2, wy = 52;
+  // Moulded surround with a keystone.
+  g.fillStyle = '#fbf6ec'; g.fillRect(wx - 12, wy - 16, ww + 24, wh + 16);
+  hg.fillStyle = '#d0d0d0'; hg.fillRect(wx - 12, wy - 16, ww + 24, wh + 16);
+  if (variant === 1) {
+    g.beginPath(); g.moveTo(wx - 18, wy - 16); g.lineTo(wx + ww / 2, wy - 38); g.lineTo(wx + ww + 18, wy - 16); g.fill();
+    hg.beginPath(); hg.moveTo(wx - 18, wy - 16); hg.lineTo(wx + ww / 2, wy - 38); hg.lineTo(wx + ww + 18, wy - 16); hg.fill();
+  } else if (variant === 2) {
+    g.beginPath(); g.arc(wx + ww / 2, wy - 6, ww / 2 + 14, Math.PI, 0); g.fill();
+  }
+  g.fillStyle = '#e6dccb'; g.fillRect(wx + ww / 2 - 9, wy - 18, 18, 22);
+  // French window: two casements, many panes, curtains behind.
+  const gl = g.createLinearGradient(wx, wy, wx + ww, wy + wh);
+  gl.addColorStop(0, '#7f97a8'); gl.addColorStop(0.5, '#2c3843'); gl.addColorStop(1, '#161c22');
+  g.fillStyle = gl; g.fillRect(wx, wy, ww, wh);
+  g.fillStyle = 'rgba(240,230,210,0.35)'; g.fillRect(wx + 3, wy + 3, 14, wh - 6); g.fillRect(wx + ww - 17, wy + 3, 14, wh - 6);
+  hg.fillStyle = '#202020'; hg.fillRect(wx, wy, ww, wh);
+  g.fillStyle = '#efe9de';
+  g.fillRect(wx + ww / 2 - 2, wy, 4, wh);
+  for (let y = wy + wh / 4; y < wy + wh; y += wh / 4) g.fillRect(wx, y - 1.5, ww, 3);
+  // Wrought-iron guard across the lower part.
+  g.strokeStyle = '#151515'; g.lineWidth = 2.5;
+  const gy = wy + wh - 46;
+  g.strokeRect(wx - 6, gy, ww + 12, 44);
+  for (let x = wx - 2; x < wx + ww + 6; x += 8) { g.beginPath(); g.moveTo(x, gy); g.lineTo(x, gy + 44); g.stroke(); }
+  if (variant !== 0) { for (let x = wx + 4; x < wx + ww; x += 16) { g.beginPath(); g.arc(x, gy + 22, 6, 0, 7); g.stroke(); } }
+  return { map: toTexture(c), normalMap: normalMap(hc, 2) };
+}
+
+// Paris ground floors: café and shop fronts in painted wood with gilt lettering.
+export function parisShop() {
+  const S = 256;
+  const [c, g] = canvas(S);
+  g.fillStyle = '#e9e0cf'; g.fillRect(0, 0, S, S);
+  g.fillStyle = 'rgba(0,0,0,0.12)'; for (let y = 0; y < S; y += 30) g.fillRect(0, y, S, 3);
+  const wood = ['#1f3d2c', '#6e1f24', '#1d2b4a', '#2b2b2b', '#4a2d5a'][Math.floor(rnd() * 5)];
+  g.fillStyle = wood; g.fillRect(10, 30, S - 20, S - 30);
+  g.fillStyle = '#d8b25a'; g.font = 'italic bold 26px serif'; g.textAlign = 'center';
+  g.fillText(['Café', 'Boulangerie', 'Bistrot', 'Fromagerie', 'Librairie', 'Pâtisserie'][Math.floor(rnd() * 6)], S / 2, 60);
+  const lit = g.createLinearGradient(0, 80, 0, S);
+  lit.addColorStop(0, '#fff0c8'); lit.addColorStop(1, '#9a6a34');
+  g.fillStyle = lit; g.fillRect(24, 80, 92, S - 80); g.fillRect(140, 80, 92, S - 80);
+  g.fillStyle = wood; g.fillRect(24, 150, 92, 4); g.fillRect(140, 150, 92, 4); g.fillRect(68, 80, 4, S - 80); g.fillRect(184, 80, 4, S - 80);
+  return { map: toTexture(c) };
+}
+
+// Zinc roofing: blue-grey standing seams. One tile = 2 m.
+export function zinc() {
+  const S = 128;
+  const [c, g] = canvas(S);
+  g.fillStyle = '#8b96a0'; g.fillRect(0, 0, S, S);
+  grain(g, S, S, 0.1, 2);
+  g.fillStyle = 'rgba(255,255,255,0.35)'; for (let x = 0; x < S; x += 16) g.fillRect(x, 0, 2, S);
+  g.fillStyle = 'rgba(0,0,0,0.25)'; for (let x = 2; x < S; x += 16) g.fillRect(x, 0, 2, S);
+  return { map: toTexture(c) };
+}
+
+// Riveted iron lattice for the Eiffel Tower: bars and X-bracing, open in between (alpha).
+export function lattice() {
+  const S = 128;
+  const [c, g] = canvas(S);
+  g.clearRect(0, 0, S, S);
+  g.strokeStyle = '#ffffff';
+  g.lineWidth = 9; g.strokeRect(0, 0, S, S);
+  g.lineWidth = 6;
+  g.beginPath(); g.moveTo(0, 0); g.lineTo(S, S); g.moveTo(S, 0); g.lineTo(0, S); g.stroke();
+  g.lineWidth = 3;
+  g.beginPath(); g.moveTo(S / 2, 0); g.lineTo(S / 2, S); g.moveTo(0, S / 2); g.lineTo(S, S / 2); g.stroke();
+  const t = toTexture(c);
+  return t;
+}
+
+// Grass with mowing stripes. One tile = 8 m.
+export function grass() {
+  const S = 256;
+  const [c, g] = canvas(S);
+  g.fillStyle = '#5d8f3a'; g.fillRect(0, 0, S, S);
+  g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(0, 0, S / 2, S);
+  grain(g, S, S, 0.18, 2);
+  return { map: toTexture(c) };
+}
+
+// Pale gravel for park paths. One tile = 4 m.
+export function gravel() {
+  const S = 256;
+  const [c, g] = canvas(S);
+  g.fillStyle = '#cdbf9f'; g.fillRect(0, 0, S, S);
+  grain(g, S, S, 0.3, 2);
+  return { map: toTexture(c) };
+}
+
+// Bright billboards for Times Square: made-up brands only.
+export function billboard(k) {
+  const W = 256, H = 160;
+  const [c, g] = canvas(W, H);
+  const themes = [
+    ['#ff2d55', '#ffd60a', 'PIZZA DRIVER', 'NOW DELIVERING'],
+    ['#0a84ff', '#ffffff', 'BROADWAY', 'THE MUSICAL'],
+    ['#30d158', '#111111', 'SODA POP', 'ICE COLD'],
+    ['#111111', '#ff9f0a', 'NEON NIGHTS', 'LIVE TONIGHT'],
+    ['#bf5af2', '#ffffff', 'SUPER SALE', '50% OFF'],
+    ['#ffd60a', '#d0021b', 'HOT DOGS', '$2 ONLY'],
+    ['#ff9f0a', '#111111', 'TAXI APP', 'RIDE NOW'],
+    ['#64d2ff', '#0b1e3a', 'SKY TOURS', 'SEE NYC'],
+  ];
+  const [bg, fg, big, small] = themes[k % themes.length];
+  const grad = g.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, bg); grad.addColorStop(1, '#000000');
+  g.fillStyle = grad; g.fillRect(0, 0, W, H);
+  g.fillStyle = fg; g.textAlign = 'center';
+  g.font = 'bold 34px sans-serif'; g.fillText(big, W / 2, H / 2);
+  g.font = 'bold 20px sans-serif'; g.fillText(small, W / 2, H / 2 + 34);
+  g.strokeStyle = fg; g.lineWidth = 6; g.strokeRect(6, 6, W - 12, H - 12);
+  return toTexture(c, { repeat: false });
+}
+
+// A word painted on a canvas, for shop signs: returns a texture.
+export function signText(text, { bg = '#1d6b3a', fg = '#ffffff', font = 'bold 40px sans-serif', w = 256, h = 64 } = {}) {
+  const [c, g] = canvas(w, h);
+  g.fillStyle = bg; g.fillRect(0, 0, w, h);
+  g.fillStyle = fg; g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, w / 2, h / 2 + 2);
+  return toTexture(c, { repeat: false });
+}
+
+// Wrought-iron balcony railing as an alpha map (white = iron): rails, bars and rings.
+export function railing() {
+  const [c, g] = canvas(128, 64);
+  g.fillStyle = '#000'; g.fillRect(0, 0, 128, 64);
+  g.fillStyle = '#fff'; g.strokeStyle = '#fff';
+  g.fillRect(0, 0, 128, 6); g.fillRect(0, 58, 128, 6);
+  for (let x = 4; x < 128; x += 16) g.fillRect(x, 0, 3, 64);
+  g.lineWidth = 3;
+  for (let x = 12; x < 128; x += 16) { g.beginPath(); g.arc(x, 32, 6, 0, 7); g.stroke(); }
+  return toTexture(c, { srgb: false });
+}

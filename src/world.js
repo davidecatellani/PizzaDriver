@@ -62,8 +62,10 @@ export class World {
 
   mergeCity() {
     const mats = this.city.materials();
-    for (const [name, geos] of this.geos) {
-      if (!geos.length) continue;
+    for (const [name, list] of this.geos) {
+      if (!list.length) continue;
+      // Merging needs all indexed or none.
+      const geos = list.every((g) => g.index) ? list : list.map((g) => (g.index ? g.toNonIndexed() : g));
       const m = new THREE.Mesh(mergeGeometries(geos),
         mats[name] || new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }));
       m.castShadow = name !== 'pavement';
@@ -149,6 +151,11 @@ export class World {
     if (inPalazzo(bi, bj)) return false;
     if (this.city.landmarkBlocks.includes(`${bi},${bj}`)) return false;
     return !this.alleyAt.has(`${bi},${bj}`);
+  }
+
+  // True when (x, z) is within `r` of where a secret alley meets a street (keep street furniture out).
+  nearAlleyMouth(x, z, r = 9) {
+    return this.alleys.some(({ a, b }) => Math.hypot(a.x - x, a.y - z) < r || Math.hypot(b.x - x, b.y - z) < r);
   }
 
   // The secret area (palazzo tunnel or an alley) containing (x, z), if any.
