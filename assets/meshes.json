@@ -1,0 +1,31 @@
+{
+  "style": "stylized cartoon game asset, low poly, bright saturated colors, clean simple shapes, no base, isolated object",
+  "meshes": [
+    { "id": "rider", "prompt": "young italian pizza delivery boy, red cap, white shirt, pizza box backpack, sneakers, full body", "polycount": 5000, "rig": true },
+    { "id": "rival_1", "prompt": "chubby delivery rider, green jacket, helmet with goggles, sneakers, full body", "polycount": 5000, "rig": true },
+    { "id": "rival_2", "prompt": "skinny delivery girl, purple hoodie, ponytail, sneakers, full body", "polycount": 5000, "rig": true },
+    { "id": "kick_scooter", "prompt": "modern electric kick scooter, matte black frame, neon green details, led headlight", "polycount": 4000 },
+    { "id": "e_skateboard", "prompt": "electric longboard skateboard, colorful graffiti deck, glowing wheels", "polycount": 2000 },
+    { "id": "e_bike", "prompt": "urban electric delivery bike, fat tires, insulated delivery box on rear rack", "polycount": 4000 },
+    { "id": "ape", "prompt": "three-wheeled piaggio ape truck, light blue, small cargo bed", "polycount": 4000 },
+    { "id": "fiat_500", "prompt": "vintage fiat 500 car, cream white", "polycount": 4000 },
+    { "id": "bus", "prompt": "neapolitan city bus, orange", "polycount": 4000 },
+    { "id": "building_1", "prompt": "neapolitan apartment building facade, 4 floors, yellow plaster, green shutters, small balconies", "polycount": 3000 },
+    { "id": "building_2", "prompt": "narrow old building, pink plaster, laundry hanging from balcony", "polycount": 3000 },
+    { "id": "pizzeria", "prompt": "small pizzeria storefront, wood fired oven sign, red awning", "polycount": 3000 },
+    { "id": "market_stall_fruit", "prompt": "market stall with lemons, oranges and tomatoes, striped awning", "polycount": 2500 },
+    { "id": "market_stall_fish", "prompt": "fish market stall with ice and fish", "polycount": 2500 },
+    { "id": "cafe_table", "prompt": "cafe table with two chairs and espresso cups", "polycount": 1500 },
+    { "id": "fountain", "prompt": "small baroque stone fountain", "polycount": 2500 },
+    { "id": "vesuvius", "prompt": "Mount Vesuvius volcano, background landmark", "polycount": 2000 },
+    { "id": "nonna", "prompt": "old italian grandmother, black dress, holding wooden spoon", "polycount": 4000, "rig": true },
+    { "id": "traffic_cop", "prompt": "italian traffic police officer, white helmet, whistle", "polycount": 4000, "rig": true },
+    { "id": "cat", "prompt": "fat orange street cat sitting", "polycount": 1500 },
+    { "id": "dumpster", "prompt": "green street dumpster", "polycount": 1000 },
+    { "id": "pizza_box", "prompt": "pizza delivery cardboard box, pickup item", "polycount": 500 },
+    { "id": "street_lamp", "prompt": "old iron street lamp", "polycount": 800 },
+    { "id": "road_barrier", "prompt": "red and white road barrier", "polycount": 800 },
+    { "id": "ramp", "prompt": "makeshift wooden plank ramp on stacked crates", "polycount": 800 },
+    { "id": "laundry_curtain", "prompt": "hanging laundry sheets across a narrow alley entrance", "polycount": 1000 }
+  ]
+}
