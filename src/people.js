@@ -139,7 +139,8 @@ class Walker {
 }
 
 export class People {
-  constructor(scene, count = 200) {
+  // `locals`: the city's own characters (Napoli's nonne and traffic cops), when it has them.
+  constructor(scene, locals = {}, count = 200) {
     let seed = 4242;
     this.rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     const rnd = this.rnd;
@@ -178,7 +179,7 @@ export class People {
     }
 
     // Grannies: the Meshy model with a procedural walk.
-    if (hasModel('nonna')) {
+    if (locals.nonna && hasModel('nonna')) {
       for (let i = 0; i < 12; i++) {
         const body = makeObject('nonna', 1.6, () => null);
         const rig = rigModel(body);
@@ -195,7 +196,7 @@ export class People {
     // Traffic cops at a few crossroads and cats on the pavements.
     this.statics = [];
     this.cats = [];
-    if (hasModel('traffic_cop')) {
+    if (locals.cops && hasModel('traffic_cop')) {
       for (const [i, j] of [[1, 1], [5, 5], [8, 2], [2, 8], [6, 9]]) {
         const cop = makeObject('traffic_cop', 1.85, () => null);
         const x = i * CELL + HALF + 1.4, z = j * CELL + HALF + 1.4;

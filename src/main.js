@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { Look, SUN_DIR } from './look.js';
 import { Fx } from './fx.js';
 import { People } from './people.js';
-import { CELL, DELIVERIES, RACE, PLAYER, RIVALS } from './config.js';
+import { CELL, RACE, PLAYER, RIVALS } from './config.js';
+import { CITIES, cityById } from './cities/index.js';
 import { loadModels } from './assets.js';
 import { World } from './world.js';
 import { Nav } from './nav.js';
@@ -57,16 +58,13 @@ class Game {
     this.scene.add(sun, sun.target);
     this.sun = sun;
 
-    this.world = new World(this.scene);
+    this.cityId = store.get('city', 'napoli');
+    this.buildCity();
     this.nav = new Nav(this.scene);
     this.fx = new Fx(this.scene);
     this.minimap = new Minimap($('minimap'));
     this.player = new Player(this.scene, this.world);
     this.rivals = makeRivals(this.scene, this.world);
-    this.traffic = new Traffic(this.scene);
-    this.people = new People(this.scene);
-    for (const c of this.people.statics) this.world.posts.push({ x: c.x, z: c.z, r: 0.6 });
-    this.traffic.onHonk = (c) => { if (c.pos.distanceTo(this.player.pos) < 25 && this.state === 'race') this.audio.sfx('horn'); };
     this.input = new Input();
     this.audio = new Audio();
     this.audio.setMuted(store.get('muted', false));
@@ -84,8 +82,13 @@ class Game {
     this.earned = store.get('earned', this.totalTips);   // all-time tips, for the Richest Riders board
     this.ranking = new Ranking(store, RIVALS);
     this.playerName = store.get('name', null);
-    this.records = store.get('records', {});   // best delivery time in seconds, by delivery index
-    this.deliveryIndex = store.get('delivery', 0) % DELIVERIES.length;
+    // Best delivery times in seconds, by 'city:index' (old saves used the bare index, all Napoli).
+    this.records = {};
+    for (const [k, v] of Object.entries(store.get('records', {}))) this.records[k.includes(':') ? k : `napoli:${k}`] = v;
+    // The delivery each city is up to.
+    this.deliveryAt = store.get('deliveryAt', { napoli: store.get('delivery', 0) });
+    this.ownedCities = store.get('cities', ['napoli']);
+    this.deliveryIndex = (this.deliveryAt[this.cityId] || 0) % this.city.deliveries.length;
     this.showTotal();
     this.resetRace();
     this.bindUI();
@@ -119,8 +122,9 @@ class Game {
         await SDK.showAd('midgame', this.adCallbacks());
         this.lastAd = performance.now() / 1000;
       }
-      this.deliveryIndex = (this.deliveryIndex + 1) % DELIVERIES.length;
-      store.set('delivery', this.deliveryIndex);
+      this.deliveryIndex = (this.deliveryIndex + 1) % this.city.deliveries.length;
+      this.deliveryAt[this.cityId] = this.deliveryIndex;
+      store.set('deliveryAt', this.deliveryAt);
       this.resetRace();
       this.startRace();
     };
@@ -205,7 +209,7 @@ class Game {
   }
 
   resetRace() {
-    const d = DELIVERIES[this.deliveryIndex];
+    const d = this.city.deliveries[this.deliveryIndex];
     this.delivery = d;
     this.world.setRoute(d);
     this.nav.setPath(d.path);
@@ -221,11 +225,39 @@ class Game {
     this.lastTick = 99;
     this.world.checkpoints.forEach((c, i) => { c.mesh.visible = i === 0; });
     this.world.customerBeam.visible = false;
-    ui.subtitle.textContent = `Napoli · Delivery ${this.deliveryIndex + 1}/${DELIVERIES.length}: ${d.name}`;
-    const best = this.records[this.deliveryIndex];
+    ui.subtitle.textContent = `${this.city.name} · Delivery ${this.deliveryIndex + 1}/${this.city.deliveries.length}: ${d.name}`;
+    const best = this.records[this.recordKey];
     $('record-line').textContent = best ? `🏆 Record: ${clock(best)}` : '';
     $('hud-best').textContent = best ? `BEST ${clock(best)}` : '';
     this.updateCamera(1);
+  }
+
+  get recordKey() { return `${this.cityId}:${this.deliveryIndex}`; }
+
+  // Builds the current city (this.cityId) into its own group, replacing the one before:
+  // streets and buildings, traffic and pedestrians. Riders keep their meshes and get the new world.
+  buildCity() {
+    if (this.cityRoot) {
+      this.scene.remove(this.cityRoot);
+      this.cityRoot.traverse((o) => {
+        if (!o.isMesh && !o.isInstancedMesh) return;
+        o.geometry.dispose();
+        for (const m of [o.material].flat()) { m.map?.dispose(); m.normalMap?.dispose(); m.dispose(); }
+      });
+    }
+    this.city = cityById(this.cityId);
+    this.cityRoot = new THREE.Group();
+    this.scene.add(this.cityRoot);
+    this.world = new World(this.cityRoot, this.city);
+    this.traffic = new Traffic(this.cityRoot, this.city.cars);
+    this.people = new People(this.cityRoot, this.city.locals);
+    for (const c of this.people.statics) this.world.posts.push({ x: c.x, z: c.z, r: 0.6 });
+    this.traffic.onHonk = (c) => { if (c.pos.distanceTo(this.player.pos) < 25 && this.state === 'race') this.audio.sfx('horn'); };
+    this.look.setCity?.(this.city);
+    if (this.player) {
+      this.player.world = this.world;
+      for (const r of this.rivals) r.world = this.world;
+    }
   }
 
   // No cars on the first street of the route, or near the start corner, when the race begins.
@@ -465,10 +497,10 @@ class Game {
     const heatBonus = Math.round(this.player.heat / 10);
     const secretBonus = 5 * this.secretsFound.size;
     // Fastest delivery on this route.
-    const best = this.records[this.deliveryIndex];
+    const best = this.records[this.recordKey];
     const record = !best || this.raceTime < best;
     if (record) {
-      this.records[this.deliveryIndex] = this.raceTime;
+      this.records[this.recordKey] = this.raceTime;
       store.set('records', this.records);
       this.toast('NEW RECORD!', 2500);
     }
@@ -598,7 +630,7 @@ class Game {
     const t = Math.max(0, Math.ceil(this.timeLeft));
     ui.time.textContent = t;
     $('hud-run').textContent = clock(this.raceTime);
-    const best = this.records[this.deliveryIndex];
+    const best = this.records[this.recordKey];
     $('hud-run').classList.toggle('over', !!best && this.raceTime > best);   // too slow for the record now
     ui.time.classList.toggle('hurry', this.timeLeft < RACE.hurryTime);
     const place = this.rank();

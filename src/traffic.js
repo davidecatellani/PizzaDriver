@@ -4,12 +4,6 @@ import { box, mat, makeObject } from './assets.js';
 
 // City traffic: lanes on every street in both directions, cars that keep their distance,
 // brake for riders in front of them, honk, and get shoved when hit.
-const KINDS = [
-  { id: 'fiat_500', len: 4, w: 2, h: 1.6, color: 0xf3ead2, speed: 13 },
-  { id: 'ape', len: 3.4, w: 1.6, h: 2, color: 0x8ec5e8, speed: 10 },
-  { id: 'fiat_500', len: 4, w: 2, h: 1.6, color: 0xc8302c, speed: 14 },
-  { id: 'bus', len: 10, w: 3, h: 3.6, color: 0xf08a24, speed: 9 },
-];
 const SPAN = GRID * CELL + 40;
 const LANE_OFFSET = 3.5;
 
@@ -26,6 +20,7 @@ function lanes() {
 }
 
 function carMesh(kind) {
+  if (kind.build) return kind.build(kind);
   return makeObject(kind.id, kind.len, () => {
     const g = new THREE.Group();
     const body = box(kind.w, kind.h * 0.6, kind.len, kind.color);
@@ -45,20 +40,21 @@ function carMesh(kind) {
 }
 
 export class Traffic {
-  constructor(scene, perLane = 2) {
+  // `kinds`: the city's vehicles (src/cities/*.js); `avenue` ones (buses) keep to the main roads.
+  constructor(scene, kinds, perLane = 2) {
     this.cars = [];
     let k = 0;
     for (const lane of lanes()) {
       for (let i = 0; i < perLane; i++) {
         // Buses only on the outer ring and the main avenues.
-        let kind = KINDS[k++ % KINDS.length];
-        if (kind.id === 'bus' && lane.line % (5 * CELL) !== 0) kind = KINDS[0];
+        let kind = kinds[k++ % kinds.length];
+        if (kind.avenue && lane.line % (5 * CELL) !== 0) kind = kinds[0];
         const mesh = carMesh(kind);
         scene.add(mesh);
         this.cars.push({
           lane, kind, mesh, s: (i / perLane) * SPAN + Math.random() * 60, speed: kind.speed,
           pos: new THREE.Vector3(), fwd: new THREE.Vector2(), stop: 0, shove: new THREE.Vector2(), honked: 0,
-          reckless: Math.random() < 0.3,   // Neapolitan driving: honks instead of braking for riders
+          reckless: Math.random() < (kind.reckless ?? 0.3),   // honks instead of braking for riders
         });
       }
     }

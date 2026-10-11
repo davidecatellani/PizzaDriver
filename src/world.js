@@ -1,76 +1,29 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { CELL, STREET, GRID, RACE, ALLEYS } from './config.js';
-import { box, mat, makeObject } from './assets.js';
-import * as TEX from './textures.js';
+import { CELL, GRID, RACE } from './config.js';
+import { box, mat } from './assets.js';
+import { HALF, ALLEY_HALF, TUNNEL, inPalazzo, worldUVs, coloredBox, seeded } from './cityKit.js';
 
-const HALF = STREET / 2;
-// Neapolitan plaster: ochre, Pompeian red, salmon, cream, terracotta, sage, pale blue.
-const PALETTE = [0xe8b75a, 0xd98c73, 0xc8643f, 0xefdcb8, 0xe6a86b, 0xcfc39b, 0xb9d3c9, 0xe3c9a0, 0xa94f3b, 0xf0c9a8];
+export { TUNNEL };
 
-// Palazzo covering blocks (2..3, 2..3); the tunnel runs through it along z = 3*CELL.
-const PALAZZO = { minX: 2 * CELL + HALF, maxX: 4 * CELL - HALF, minZ: 2 * CELL + HALF, maxZ: 4 * CELL - HALF };
-const TUNNEL_HALF = 3.6;
-const ALLEY_HALF = 2.7;     // half-width of a secret alley between the buildings
-export const TUNNEL = { minX: PALAZZO.minX, maxX: PALAZZO.maxX, minZ: 3 * CELL - TUNNEL_HALF, maxZ: 3 * CELL + TUNNEL_HALF };
-
-const PLINTH = 3.6;      // ground floor (shops) height
-const BAY = 5;          // facade window spacing
-const FLOOR = 4;        // storey height above the ground floor
-
-// UVs from world position, for tiled surfaces (pavement, ground).
-function worldUVs(geo, scale) {
-  const p = geo.attributes.position, n = geo.attributes.normal, uv = geo.attributes.uv;
-  for (let i = 0; i < p.count; i++) {
-    const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i));
-    if (ay > 0.5) uv.setXY(i, p.getX(i) / scale, p.getZ(i) / scale);
-    else if (ax > 0.5) uv.setXY(i, p.getZ(i) / scale, p.getY(i) / scale);
-    else uv.setXY(i, p.getX(i) / scale, p.getY(i) / scale);
-  }
-}
-
-// Box UVs so each side face shows a whole number of bays across and `rows` across the height.
-// Roof and floor get a plain texel.
-function bayUVs(geo, w, d, bay, rows) {
-  const uv = geo.attributes.uv;
-  const widths = [d, d, 0, 0, w, w];
-  for (let f = 0; f < 6; f++) {
-    for (let i = 0; i < 4; i++) {
-      const k = f * 4 + i;
-      if (!widths[f]) uv.setXY(k, 0.5, 0.01);
-      else uv.setXY(k, uv.getX(k) * Math.max(1, Math.round(widths[f] / bay)), uv.getY(k) * rows);
-    }
-  }
-}
-
-function coloredBox(w, h, d, x, y, z, color, uvFix) {
-  const geo = new THREE.BoxGeometry(w, h, d);
-  uvFix?.(geo);
-  geo.translate(x, y, z);
-  const c = new THREE.Color(color);
-  const cols = new Float32Array(geo.attributes.position.count * 3);
-  for (let i = 0; i < cols.length; i += 3) { cols[i] = c.r; cols[i + 1] = c.g; cols[i + 2] = c.b; }
-  geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-  return geo;
-}
-
+// The playable city: one street grid shared by every city, dressed by a city module
+// (src/cities/*.js) that builds its blocks, landmark block, alleys, street furniture and skyline.
+// Everything goes into `scene`, which can be a Group so a whole city can be swapped out.
 export class World {
-  constructor(scene) {
+  constructor(scene, city) {
     this.scene = scene;
+    this.city = city;
     this.colliders = [];
     this.posts = [];            // thin round obstacles (lamp posts): riders slide round them
     this.ramps = [];
     this.roadworks = [];        // static road-works dressing, rebuilt with each route
     this.debris = [];           // loose pieces that fly off when hit
-    this.rnd = (() => { let seed = 99; return () => ((seed = (seed * 16807) % 2147483647) / 2147483647); })();
-    this.facades = [[], [], [], []];   // one list per facade texture variant
-    this.plinths = [];
-    this.trims = [];                   // cornices, balconies, rooftop rooms: untextured, vertex coloured
-    this.pavements = [];
+    this.rnd = seeded(99);
+    this.geos = new Map();      // merged-mesh buckets: name -> geometries (see geo())
     // Secret alleys: which blocks they cut through, and the hidden areas that count as found.
     this.alleyAt = new Map();
     this.secrets = [{ ...TUNNEL, minX: TUNNEL.minX + 4, maxX: TUNNEL.maxX - 4, id: 'tunnel' }];
-    this.alleys = ALLEYS.map((a, n) => {
+    this.alleys = city.alleys.map((a, n) => {
       const line = (a.at + 0.5) * CELL;
       for (let k = a.from; k < a.to; k++) {
         const [bi, bj] = a.axis === 'x' ? [k, a.at] : [a.at, k];
@@ -87,94 +40,53 @@ export class World {
     });
     this.buildGround();
     this.buildCity();
-    this.buildPalazzo();
+    city.special(this);
     this.mergeCity();
+    city.landmarks(this);
     this.buildLandmarks();
-    this.buildStreetLife();
+    city.streetLife(this);
+    this.zebras();
     this.checkpoints = [];
-    this.routeRamps = [];
   }
 
   addCollider(minX, maxX, minZ, maxZ) {
     this.colliders.push({ minX, maxX, minZ, maxZ });
   }
 
-  // Buildings and pavements are collected and merged into a few meshes (one per material),
-  // so the whole city costs a handful of draw calls instead of one per box.
-  // `streets` lists the sides that face a street ('-x', '+x', '-z', '+z'): those get balconies.
-  building(x, z, w, d, h, color, streets = []) {
-    const rnd = this.rnd;
-    const floors = Math.max(1, Math.round((h - PLINTH) / FLOOR));
-    h = PLINTH + floors * FLOOR;
-    const variant = Math.floor(rnd() * 4);
-    const trim = new THREE.Color(color).lerp(new THREE.Color(0xfff8ec), 0.55);
-    this.facades[variant].push(coloredBox(w, h - PLINTH, d, x, PLINTH + (h - PLINTH) / 2, z, color, (g) => bayUVs(g, w, d, BAY, floors)));
-    this.plinths.push(coloredBox(w + 0.2, PLINTH, d + 0.2, x, PLINTH / 2, z, 0xffffff, (g) => bayUVs(g, w, d, 7, 1)));
-    // Cornice on top and a band over the shops.
-    this.trims.push(coloredBox(w + 1, 0.6, d + 1, x, h - 0.3, z, trim));
-    this.trims.push(coloredBox(w + 0.5, 0.35, d + 0.5, x, PLINTH, z, trim));
-    // Some roofs carry a set-back attic room.
-    if (rnd() < 0.35) this.trims.push(coloredBox(w * 0.45, 2.6, d * 0.4, x + (rnd() - 0.5) * w * 0.3, h + 1.3, z + (rnd() - 0.5) * d * 0.3, color));
-    // Balconies on the street sides, lined up with the painted windows.
-    if (variant !== 2) {
-      for (const side of streets) {
-        const alongX = side[1] === 'z';
-        const width = alongX ? w : d;
-        const bays = Math.max(1, Math.round(width / BAY)), bw = width / bays;
-        const sgn = side[0] === '+' ? 1 : -1;
-        for (let f = 0; f < floors; f++) {
-          if (rnd() < 0.4) continue;
-          const y = PLINTH + f * FLOOR + FLOOR * 0.31;
-          for (let b = 0; b < bays; b++) {
-            if (rnd() < 0.3) continue;
-            const t = -width / 2 + bw * (b + 0.5);
-            const out = (alongX ? d : w) / 2 + 0.45;
-            const [cx, cz] = alongX ? [x + t, z + sgn * out] : [x + sgn * out, z + t];
-            const [sw, sd] = alongX ? [bw * 0.62, 0.9] : [0.9, bw * 0.62];
-            this.trims.push(coloredBox(sw, 0.16, sd, cx, y, cz, trim));
-            // Railing: front and two sides, wrought-iron dark.
-            const [fx, fz] = alongX ? [cx, cz + sgn * 0.42] : [cx + sgn * 0.42, cz];
-            this.trims.push(coloredBox(alongX ? sw : 0.05, 0.9, alongX ? 0.05 : sd, fx, y + 0.53, fz, 0x262626));
-          }
-        }
-      }
-    }
-    this.addCollider(x - w / 2 - 0.1, x + w / 2 + 0.1, z - d / 2 - 0.1, z + d / 2 + 0.1);
+  // A bucket of geometries merged into one mesh at the end of the build, with the city's
+  // material of the same name (vertex-coloured plain material if the city has none).
+  geo(name) {
+    if (!this.geos.has(name)) this.geos.set(name, []);
+    return this.geos.get(name);
   }
 
   mergeCity() {
-    const add = (geos, material, shadow = true) => {
-      if (!geos.length) return;
-      const m = new THREE.Mesh(mergeGeometries(geos), material);
-      m.castShadow = shadow;
+    const mats = this.city.materials();
+    for (const [name, geos] of this.geos) {
+      if (!geos.length) continue;
+      const m = new THREE.Mesh(mergeGeometries(geos),
+        mats[name] || new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }));
+      m.castShadow = name !== 'pavement';
       m.receiveShadow = true;
       this.scene.add(m);
-    };
-    this.facades.forEach((geos, v) => {
-      const t = TEX.facade(v);
-      add(geos, new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normalMap, vertexColors: true, roughness: 0.9 }));
-    });
-    const shop = TEX.shopfront();
-    add(this.plinths, new THREE.MeshStandardMaterial({ map: shop.map, vertexColors: true, roughness: 0.85 }));
-    add(this.trims, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }));
-    const pav = TEX.pavement();
-    add(this.pavements, new THREE.MeshStandardMaterial({ map: pav.map, normalMap: pav.normalMap, vertexColors: true, roughness: 0.9 }), false);
+    }
+    this.geos.clear();
   }
 
   buildGround() {
     const size = (GRID + 4) * CELL;
-    const stone = TEX.basoli();
-    stone.map.repeat.set(size / 4, size / 4);
-    stone.normalMap.repeat.set(size / 4, size / 4);
-    const asphalt = new THREE.Mesh(new THREE.PlaneGeometry(size, size),
-      new THREE.MeshStandardMaterial({ map: stone.map, normalMap: stone.normalMap, roughness: 0.85 }));
-    asphalt.rotation.x = -Math.PI / 2;
-    asphalt.position.set(GRID * CELL / 2, 0, GRID * CELL / 2);
-    asphalt.receiveShadow = true;
-    this.scene.add(asphalt);
+    const tex = this.city.ground();
+    tex.map.repeat.set(size / 4, size / 4);
+    tex.normalMap?.repeat.set(size / 4, size / 4);
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(size, size),
+      new THREE.MeshStandardMaterial({ map: tex.map, normalMap: tex.normalMap, roughness: 0.85 }));
+    road.rotation.x = -Math.PI / 2;
+    road.position.set(GRID * CELL / 2, 0, GRID * CELL / 2);
+    road.receiveShadow = true;
+    this.scene.add(road);
 
     // Dashed centre lines.
-    const dash = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.4, 3), mat(0xf5f1e6), 2000);
+    const dash = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.4, 3), mat(this.city.roadLines), 2000);
     const m4 = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     let n = 0;
@@ -195,20 +107,19 @@ export class World {
   }
 
   sidewalk(minX, maxX, minZ, maxZ) {
-    const geo = coloredBox(maxX - minX, 0.3, maxZ - minZ, (minX + maxX) / 2, 0.15, (minZ + maxZ) / 2, 0xc9c1b4);
+    const geo = coloredBox(maxX - minX, 0.3, maxZ - minZ, (minX + maxX) / 2, 0.15, (minZ + maxZ) / 2, this.city.pavementColor);
     worldUVs(geo, 2);
-    this.pavements.push(geo);
+    this.geo('pavement').push(geo);
   }
 
+  // Pavements everywhere, alleys left open, then each block's contents from the city.
   buildCity() {
-    let seed = 7;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-
+    const rnd = seeded(7);
     for (let bi = -1; bi <= GRID; bi++) {
       for (let bj = -1; bj <= GRID; bj++) {
         const minX = bi * CELL + HALF, maxX = (bi + 1) * CELL - HALF;
         const minZ = bj * CELL + HALF, maxZ = (bj + 1) * CELL - HALF;
-        if (bi >= 2 && bi <= 3 && bj >= 2 && bj <= 3) continue; // palazzo
+        if (inPalazzo(bi, bj)) continue;
         const outer = bi < 0 || bj < 0 || bi >= GRID || bj >= GRID;
         const alley = this.alleyAt.get(`${bi},${bj}`);
         if (alley) {
@@ -221,154 +132,22 @@ export class World {
             this.sidewalk(minX, L - ALLEY_HALF, minZ, maxZ);
             this.sidewalk(L + ALLEY_HALF, maxX, minZ, maxZ);
           }
-          this.alleyDressing(alley, minX, maxX, minZ, maxZ);
+          this.city.alleyDressing(this, alley, minX, maxX, minZ, maxZ);
         } else {
           this.sidewalk(minX, maxX, minZ, maxZ);
         }
         const inner = { minX: minX + 2, maxX: maxX - 2, minZ: minZ + 2, maxZ: maxZ - 2 };
-
-        if (!outer && bi === 1 && bj === 4) { this.piazza(inner); continue; }
-        if (!outer && bi === 0 && bj === 1) { this.market(inner); continue; }
-        if (!outer && bi === 0 && bj === 0) { this.pizzeria(inner); continue; }
-
-        // 2x2 buildings per block, random heights.
-        const w = (inner.maxX - inner.minX) / 2, d = (inner.maxZ - inner.minZ) / 2;
-        for (let a = 0; a < 2; a++) {
-          for (let b = 0; b < 2; b++) {
-            const h = outer ? 24 + rnd() * 10 : 11 + rnd() * 13;
-            const col = PALETTE[Math.floor(rnd() * PALETTE.length)];
-            const streets = outer ? [] : [a ? '+x' : '-x', b ? '+z' : '-z'];
-            let x0 = inner.minX + w * a + 0.3, x1 = inner.minX + w * (a + 1) - 0.3;
-            let z0 = inner.minZ + d * b + 0.3, z1 = inner.minZ + d * (b + 1) - 0.3;
-            // Leave the alley open between the two rows of buildings.
-            if (alley?.axis === 'x') { if (b === 0) z1 = alley.line - ALLEY_HALF; else z0 = alley.line + ALLEY_HALF; }
-            if (alley?.axis === 'z') { if (a === 0) x1 = alley.line - ALLEY_HALF; else x0 = alley.line + ALLEY_HALF; }
-            this.building((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, h, col, streets);
-          }
-        }
+        this.city.block(this, bi, bj, inner, outer, alley, rnd);
       }
     }
-  }
-
-  pizzeria(r) {
-    const cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2;
-    const fallback = () => {
-      const g = new THREE.Group();
-      const body = box(r.maxX - r.minX, 10, r.maxZ - r.minZ, 0xf6e7c8);
-      body.position.y = 5;
-      g.add(body);
-      const awning = box(r.maxX - r.minX + 0.5, 0.6, 3, 0xc8302c);
-      awning.position.set(0, 4.5, -(r.maxZ - r.minZ) / 2 - 1.2);
-      g.add(awning);
-      return g;
-    };
-    const p = makeObject('pizzeria', r.maxX - r.minX, fallback);
-    p.position.set(cx, 0, cz);
-    this.scene.add(p);
-    this.addCollider(r.minX, r.maxX, r.minZ, r.maxZ);
-    this.sign('PIZZERIA', cx - (r.maxX - r.minX) / 2 - 0.2, 7, cz, Math.PI / 2);
-  }
-
-  market(r) {
-    const stalls = [0xf7c948, 0xf08a24, 0xd94b3d, 0x4fa3d9];
-    for (let i = 0; i < 4; i++) {
-      const z = r.minZ + 3 + i * ((r.maxZ - r.minZ - 6) / 3);
-      const x = r.minX + 2.5;
-      const stall = makeObject(i % 2 ? 'market_stall_fish' : 'market_stall_fruit', 4, () => {
-        const g = new THREE.Group();
-        const t = box(3, 1.2, 4, 0x8b5a2b); t.position.y = 0.6; g.add(t);
-        const top = box(3.4, 0.2, 4.4, stalls[i]); top.position.y = 3; g.add(top);
-        const goods = box(2.6, 0.5, 3.4, i % 2 ? 0x9fd3e6 : 0xf2b134); goods.position.y = 1.45; g.add(goods);
-        return g;
-      });
-      stall.position.set(x, 0.3, z);
-      this.scene.add(stall);
-      this.addCollider(x - 1.7, x + 1.7, z - 2.2, z + 2.2);
-    }
-    this.building((r.minX + r.maxX) / 2 + 6, (r.minZ + r.maxZ) / 2, 14, r.maxZ - r.minZ, 12, 0xf4a6a0);
-  }
-
-  piazza(r) {
-    const cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2;
-    const f = makeObject('fountain', 7, () => {
-      const g = new THREE.Group();
-      const basin = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 3.8, 1, 20), mat(0xd8d2c4));
-      basin.position.y = 0.5; g.add(basin);
-      const water = new THREE.Mesh(new THREE.CylinderGeometry(3.1, 3.1, 0.2, 20), mat(0x5fb7e5));
-      water.position.y = 1; g.add(water);
-      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 4, 10), mat(0xd8d2c4));
-      col.position.y = 2.5; g.add(col);
-      return g;
-    });
-    f.position.set(cx, 0.3, cz);
-    this.scene.add(f);
-    this.addCollider(cx - 3.6, cx + 3.6, cz - 3.6, cz + 3.6);
-    for (const [dx, dz] of [[-9, -9], [9, -9], [-9, 9], [9, 9]]) {
-      const t = makeObject('cafe_table', 2, () => {
-        const g = new THREE.Group();
-        const top = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.1, 12), mat(0xffffff));
-        top.position.y = 1; g.add(top);
-        const leg = box(0.15, 1, 0.15, 0x333333); leg.position.y = 0.5; g.add(leg);
-        return g;
-      });
-      t.position.set(cx + dx, 0.3, cz + dz);
-      this.scene.add(t);
-    }
-  }
-
-  buildPalazzo() {
-    const P = PALAZZO, T = TUNNEL;
-    const h = 20, w = P.maxX - P.minX;
-    this.sidewalk(P.minX - 2, P.maxX + 2, P.minZ - 2, P.maxZ + 2);
-    this.building((P.minX + P.maxX) / 2, (P.minZ + T.minZ) / 2, w, T.minZ - P.minZ, h, 0xe8c07a);
-    this.building((P.minX + P.maxX) / 2, (T.maxZ + P.maxZ) / 2, w, P.maxZ - T.maxZ, h, 0xe8c07a);
-    // Arch over the tunnel, high enough to ride under.
-    const roof = box(w, h - 6, T.maxZ - T.minZ, 0xd9ab62);
-    roof.position.set((P.minX + P.maxX) / 2, 6 + (h - 6) / 2, 3 * CELL);
-    this.scene.add(roof);
-    // Laundry hides both entrances: you can ride straight through it.
-    this.curtains ??= [];
-    for (const x of [T.minX - 0.3, T.maxX + 0.3]) {
-      const sheets = [0xffffff, 0xf2a7c3, 0x9fd3e6, 0xf7e27a];
-      for (let i = 0; i < 4; i++) {
-        const s = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 4.2), mat(sheets[i], { side: THREE.DoubleSide }));
-        s.position.set(x, 3.6, T.minZ + 0.9 + i * 1.8);
-        s.rotation.y = Math.PI / 2;
-        this.scene.add(s);
-        this.curtains.push(s);
-      }
-    }
-  }
-
-  // An alley through one block: laundry hiding both mouths, an arch overhead, washing lines above.
-  alleyDressing(alley, minX, maxX, minZ, maxZ) {
-    const L = alley.line, alongX = alley.axis === 'x';
-    const sheets = [0xffffff, 0xf2a7c3, 0x9fd3e6, 0xf7e27a, 0xe85d4a];
-    const mouths = alongX ? [minX + 2.6, maxX - 2.6] : [minZ + 2.6, maxZ - 2.6];
-    this.curtains ??= [];
-    for (const m of mouths) {
-      for (let i = 0; i < 3; i++) {
-        const sheet = new THREE.Mesh(new THREE.PlaneGeometry(1.75, 4), mat(sheets[(i + Math.round(m)) % sheets.length], { side: THREE.DoubleSide }));
-        const t = L - ALLEY_HALF + 0.9 + i * 1.8;
-        if (alongX) { sheet.position.set(m, 3.3, t); sheet.rotation.y = Math.PI / 2; } else sheet.position.set(t, 3.3, m);
-        this.scene.add(sheet);
-        this.curtains.push(sheet);
-      }
-    }
-    // Arch joining the two rows of buildings in the middle of the block.
-    const c = alongX ? (minX + maxX) / 2 : (minZ + maxZ) / 2;
-    const [w, d] = alongX ? [5, ALLEY_HALF * 2 + 0.6] : [ALLEY_HALF * 2 + 0.6, 5];
-    const [x, z] = alongX ? [c, L] : [L, c];
-    this.facades[1].push(coloredBox(w, 5, d, x, 8.1, z, 0xe3c9a0, (g) => bayUVs(g, w, d, BAY, 1)));
-    this.trims.push(coloredBox(w + 0.4, 0.4, d + 0.4, x, 5.6, z, 0xfff1dc));
   }
 
   // True when (x, z) is inside an ordinary block of buildings (not a landmark, the palazzo or an alley).
   plainBlock(x, z) {
     const bi = Math.floor(x / CELL), bj = Math.floor(z / CELL);
     if (bi < 0 || bj < 0 || bi >= GRID || bj >= GRID) return false;
-    if (bi >= 2 && bi <= 3 && bj >= 2 && bj <= 3) return false;
-    if ((bi === 1 && bj === 4) || (bi === 0 && bj === 1) || (bi === 0 && bj === 0)) return false;
+    if (inPalazzo(bi, bj)) return false;
+    if (this.city.landmarkBlocks.includes(`${bi},${bj}`)) return false;
     return !this.alleyAt.has(`${bi},${bj}`);
   }
 
@@ -377,19 +156,10 @@ export class World {
     return this.secrets.find((r) => x > r.minX && x < r.maxX && z > r.minZ && z < r.maxZ);
   }
 
-  // Street furniture and life: lamp posts at the corners, zebra crossings, laundry lines across streets.
-  buildStreetLife() {
-    const rnd = this.rnd;
+  // Lamp posts at the four kerb corners of every block, as two instanced meshes: the post
+  // (`postGeo`, arm along +z out over the street) and its glowing lamp (`lampGeo`).
+  lampPosts(postGeo, lampGeo, { post = 0x22262a, light = 0xffc46b } = {}) {
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
-    const inPalazzo = (bi, bj) => bi >= 2 && bi <= 3 && bj >= 2 && bj <= 3;
-
-    // Lamp posts: iron pole with a curved arm and a glowing lantern.
-    const iron = mergeGeometries([
-      new THREE.CylinderGeometry(0.1, 0.16, 5, 8).translate(0, 2.5, 0),
-      new THREE.CylinderGeometry(0.22, 0.22, 0.5, 8).translate(0, 0.25, 0),
-      new THREE.BoxGeometry(0.08, 0.08, 1.2).translate(0, 5, 0.55),
-      new THREE.ConeGeometry(0.42, 0.35, 8).translate(0, 5.05, 1.1),
-    ]);
     const lamps = [];
     for (let bi = 0; bi < GRID; bi++) {
       for (let bj = 0; bj < GRID; bj++) {
@@ -405,9 +175,9 @@ export class World {
         }
       }
     }
-    const poles = new THREE.InstancedMesh(iron, mat(0x22262a, { roughness: 0.5, metalness: 0.6 }), lamps.length);
-    const glow = new THREE.InstancedMesh(new THREE.BoxGeometry(0.4, 0.5, 0.4).translate(0, 4.65, 1.1),
-      new THREE.MeshStandardMaterial({ color: 0xfff1c9, emissive: 0xffc46b, emissiveIntensity: 1.6 }), lamps.length);
+    const poles = new THREE.InstancedMesh(postGeo, mat(post, { roughness: 0.5, metalness: 0.6 }), lamps.length);
+    const glow = new THREE.InstancedMesh(lampGeo,
+      new THREE.MeshStandardMaterial({ color: 0xfff1c9, emissive: light, emissiveIntensity: 1.6 }), lamps.length);
     lamps.forEach((l, k) => {
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), l.rot);
       m4.compose(new THREE.Vector3(l.x, 0.3, l.z), q, one);
@@ -416,8 +186,11 @@ export class World {
     });
     poles.castShadow = true;
     this.scene.add(poles, glow);
+  }
 
-    // Zebra crossings on every approach to every crossroads.
+  // Zebra crossings on every approach to every crossroads.
+  zebras() {
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
     const stripes = [];
     for (let i = 0; i <= GRID; i++) {
       for (let j = 0; j <= GRID; j++) {
@@ -438,44 +211,6 @@ export class World {
     });
     zebra.receiveShadow = true;
     this.scene.add(zebra);
-
-    // Laundry hung on lines between facing balconies, high above the traffic.
-    const cloth = [], lines = [];
-    const span = HALF + 2.4;
-    for (let i = 0; i <= GRID; i++) {
-      for (let j = 0; j < GRID; j++) {
-        for (const alongZ of [true, false]) {
-          if (i === 3 && (j === 2 || j === 3)) continue;    // inside the palazzo
-          if (rnd() > 0.45) continue;
-          const t = j * CELL + CELL * (0.3 + rnd() * 0.4);
-          const y = 6.5 + rnd() * 3.5;
-          const c = i * CELL;
-          // The line runs across the street: along x for a street that runs along z.
-          const at = (u) => (alongZ ? [c + u, t] : [t, c + u]);
-          const [x0, z0] = at(0);
-          lines.push(new THREE.BoxGeometry(alongZ ? span * 2 : 0.04, 0.04, alongZ ? 0.04 : span * 2).translate(x0, y, z0));
-          for (let u = -span + 1; u < span - 0.8; u += 1.3 + rnd() * 0.6) {
-            if (rnd() < 0.25) continue;
-            const k = Math.floor(rnd() * 8);
-            const ch = 0.8 + rnd() * 0.7, cw = 0.7 + rnd() * 0.4;
-            const g = new THREE.PlaneGeometry(cw, ch);
-            const uv = g.attributes.uv;
-            for (let n = 0; n < uv.count; n++) uv.setX(n, (k + uv.getX(n) * 0.9 + 0.05) / 8);
-            const sag = 0.5 * (1 - (u / span) ** 2);
-            g.translate(0, -ch / 2, 0);
-            if (alongZ) g.rotateY(0); else g.rotateY(Math.PI / 2);
-            const [x, z] = at(u + cw / 2);
-            g.translate(x, y - sag, z);
-            cloth.push(g);
-          }
-        }
-      }
-    }
-    const clothes = new THREE.Mesh(mergeGeometries(cloth),
-      new THREE.MeshStandardMaterial({ map: TEX.laundry(), side: THREE.DoubleSide, roughness: 1 }));
-    clothes.castShadow = true;
-    this.clothes = clothes;
-    this.scene.add(clothes, new THREE.Mesh(mergeGeometries(lines), new THREE.MeshBasicMaterial({ color: 0x3a3a3a })));
   }
 
   // A straight jump at (x, z) facing `heading` (0 = +z): rises from 0 to h over L metres, w wide.
@@ -484,30 +219,30 @@ export class World {
     const dims = { stairs: [9, 5, 2.4], crates: [8, 2.8, 2.1], truck: [9, 2.5, 3.2] }[kind];
     const [L, w, h] = dims;
     const g = new THREE.Group();
-    const stone = 0xd8cdb8, wood = 0x9c6b3c;
+    const st = this.city.rampStyle, wood = 0x9c6b3c;
     if (kind === 'stairs') {
       // Marble steps with low parapet walls either side.
       const n = 10;
       for (let k = 0; k < n; k++) {
-        const step = box(w, h * (k + 1) / n, L / n, k % 2 ? stone : 0xcfc3ac);
+        const step = box(w, h * (k + 1) / n, L / n, st.steps[k % 2]);
         step.position.set(0, h * (k + 1) / n / 2, L * (k + 0.5) / n);
         g.add(step);
       }
       // The palazzo's entrance: a stone landing across the pavement at the top of the steps,
       // and a doorway in the facade behind it. Local +x is towards the kerb and the building.
       const toWall = HALF + 2.3 - (HALF - 2.3) - w / 2;   // from the steps' edge to the facade
-      const landing = box(toWall, h, 3.2, 0xcfc3ac);
+      const landing = box(toWall, h, 3.2, st.steps[1]);
       landing.position.set(w / 2 + toWall / 2, h / 2, L - 1.6);
       landing.userData.solid = h;   // walkers and riders on the pavement go round it
       g.add(landing);
-      const frame = box(0.2, 3.9, 3.1, 0xe9e2d4);
+      const frame = box(0.2, 3.9, 3.1, st.frame);
       frame.position.set(w / 2 + toWall + 0.05, h + 1.95, L - 1.6);
       g.add(frame);
-      const door = box(0.12, 3.2, 2.2, 0x4a3324);
+      const door = box(0.12, 3.2, 2.2, st.door);
       door.position.set(w / 2 + toWall - 0.08, h + 1.6, L - 1.6);
       g.add(door);
       for (const sx of [-1]) {
-        const wall = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1, L), mat(0xbfb29a));
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1, L), mat(st.wall));
         wall.position.set(sx * (w / 2 + 0.22), 0.5, L / 2);
         // Sloped top following the steps.
         const pos = wall.geometry.attributes.position;
@@ -538,7 +273,7 @@ export class World {
     } else if (kind === 'truck') {
       // A parked tipper truck with its body tipped right down to the road: ride up the bed
       // and fly over the cab. Local +z is the truck's front.
-      const yellow = 0xe8b21c, steel = 0x3b3f44;
+      const yellow = st.truck, steel = 0x3b3f44;
       const slope = -Math.atan2(h, L), len = Math.hypot(L, h);
       const bed = new THREE.Group();
       bed.rotation.x = slope;
@@ -648,8 +383,9 @@ export class World {
       this.debris.push({ ...piece, vel: new THREE.Vector3(), spin: new THREE.Vector3(), flying: false });
     };
     // Barriers along the road side of the dig and across its far end.
-    for (let k = 0; k < 4; k++) put(barrier(k % 2 === 0), -2.9, L + 2.6 + k * 2.2, Math.PI / 2);
-    for (const lx of [-1.8, 0.4]) put(barrier(lx < 0), lx, L + 11.2, 0);
+    const fence = this.city.rampStyle.works === 'barrel' ? () => barrel() : (lamp) => barrier(lamp);
+    for (let k = 0; k < 4; k++) put(fence(k % 2 === 0), -2.9, L + 2.6 + k * 2.2, Math.PI / 2);
+    for (const lx of [-1.8, 0.4]) put(fence(lx < 0), lx, L + 11.2, 0);
     // Cones leading up to the plank and tapering back after the works.
     for (const [lx, lz] of [[-2.1, -5], [-2.1, -1.5], [-2.1, 2.5], [-2.1, 6], [-3, L + 12.5], [-1.9, L + 13.8], [-0.7, L + 14.8]]) put(cone(), lx, lz, 0);
     // A pallet of basoli waiting to be relaid, and the warning sign on the pavement.
@@ -761,15 +497,6 @@ export class World {
   }
 
   buildLandmarks() {
-    const v = makeObject('vesuvius', 260, () => {
-      const g = new THREE.Group();
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(160, 110, 24, 1, true), mat(0x6f7f5a));
-      cone.position.y = 55; g.add(cone);
-      return g;
-    });
-    v.position.set(GRID * CELL * 0.5, -5, -260);
-    this.scene.add(v);
-
     // Customer marker: a beam of light, moved to each delivery's address.
     this.customerPos = new THREE.Vector3();
     const beam = new THREE.Mesh(
@@ -834,9 +561,10 @@ export class World {
       // a parked tipper truck with its body down).
       if (len >= 3 * CELL && !onDetour && longSegs++ % 2 === 0) {
         const p = a.clone().addScaledVector(dir, len * 0.35);
-        let kind = ['stairs', 'fountain', 'crates', 'truck'][rampKind++ % 4];
+        const kinds = this.city.ramps;
+        let kind = kinds[rampKind++ % kinds.length];
         // Entrance steps need an ordinary palazzo beside them.
-        if (kind === 'stairs' && !this.plainBlock(p.x + dir.y * 14, p.y - dir.x * 14)) kind = 'crates';
+        if (kind === 'stairs' && !this.plainBlock(p.x + dir.y * 14, p.y - dir.x * 14)) kind = kinds.includes('crates') ? 'crates' : 'truck';
         // Steps, planks and the truck stand against the kerb on the left; fountains sit mid-street.
         const off = { stairs: HALF - 2.3, crates: HALF - 1.7, truck: HALF - 1.9 }[kind];
         if (kind === 'fountain') this.addFountainJump(p.x, p.y);
@@ -907,6 +635,18 @@ function barrier(lamp) {
     g.add(l);
   }
   return { mesh: g, half: 0.55, lie: 0.12, r: 1.1, mass: 1.2 };
+}
+
+// New York's orange-and-white traffic drum.
+let drumMat;
+function barrel() {
+  drumMat ??= new THREE.MeshStandardMaterial({ map: (() => { const t = stripes('#ff6a13', '#f4f4f4', 4); t.rotation = Math.PI / 2; t.center.set(0.5, 0.5); return t; })(), roughness: 0.5 });
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.42, 1, 14), drumMat);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.1, 14), mat(0x1c1c1c));
+  base.position.y = -0.48;
+  g.add(body, base);
+  return { mesh: g, half: 0.5, lie: 0.42, r: 0.55, mass: 1 };
 }
 
 let coneMat;
