@@ -1,6 +1,7 @@
 // Generates the level meshes with the Meshy Text to 3D API.
-// Usage: MESHY_API_KEY=... node tools/meshy/generate.mjs tools/meshy/napoli.json assets/models/napoli/raw [id ...]
-// Resumable: task ids are saved in <out>/tasks.json, finished GLBs are skipped.
+// Usage: MESHY_API_KEY=... node tools/meshy/generate.mjs [id ...]
+// Reads assets/meshes.json, writes raw GLBs to .meshy-raw/ (git-ignored).
+// Resumable: task ids are saved in .meshy-raw/tasks.json, finished GLBs are skipped.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -8,7 +9,9 @@ const API = 'https://api.meshy.ai/openapi/v2/text-to-3d';
 const KEY = process.env.MESHY_API_KEY;
 if (!KEY) { console.error('MESHY_API_KEY is not set'); process.exit(1); }
 
-const [listFile, outDir, ...only] = process.argv.slice(2);
+const only = process.argv.slice(2);
+const listFile = 'assets/meshes.json';
+const outDir = '.meshy-raw';
 const list = JSON.parse(await fs.readFile(listFile, 'utf8'));
 await fs.mkdir(outDir, { recursive: true });
 const tasksFile = path.join(outDir, 'tasks.json');
@@ -48,7 +51,7 @@ async function build(m) {
   if (!t.preview) {
     const r = await call('POST', API, {
       mode: 'preview',
-      prompt: `${m.prompt}, ${list.style_suffix}`.slice(0, 600),
+      prompt: `${m.prompt}, ${list.style}`.slice(0, 600),
       art_style: 'realistic',
       ai_model: 'latest',
       topology: 'triangle',
