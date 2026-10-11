@@ -46,8 +46,11 @@ function cornerS(r, cx, cz) {
 }
 
 class Walker {
-  constructor(rnd, speed) {
-    do { this.bi = Math.floor(rnd() * GRID); this.bj = Math.floor(rnd() * GRID); } while (palazzo(this.bi, this.bj));
+  // `zone`: a Set of "bi,bj" blocks a walker stays in (a busy square), crossing between them often.
+  constructor(rnd, speed, zone = null) {
+    this.zone = zone;
+    if (zone) [this.bi, this.bj] = [...zone][Math.floor(rnd() * zone.size)].split(',').map(Number);
+    else do { this.bi = Math.floor(rnd() * GRID); this.bj = Math.floor(rnd() * GRID); } while (palazzo(this.bi, this.bj));
     this.rect = blockRect(this.bi, this.bj);
     this.s = rnd() * 150;
     this.dir = rnd() < 0.5 ? 1 : -1;
@@ -107,7 +110,7 @@ class Walker {
       this.lastCorner = id;
       const roll = rnd();
       if (roll < 0.15) this.pause = 1 + rnd() * 3;
-      else if (roll < 0.5) this.startCross(cx, cz, rnd() < 0.5, x, z);
+      else if (roll < (this.zone ? 0.85 : 0.5)) this.startCross(cx, cz, rnd() < 0.5, x, z);
       break;
     }
     return this.speed;
@@ -117,6 +120,7 @@ class Walker {
     const bi = this.bi + (alongX ? (cx ? 1 : -1) : 0);
     const bj = this.bj + (alongX ? 0 : (cz ? 1 : -1));
     if (bi < 0 || bj < 0 || bi >= GRID || bj >= GRID || palazzo(bi, bj)) return;
+    if (this.zone && !this.zone.has(`${bi},${bj}`)) return;
     const n = blockRect(bi, bj);
     const ncx = alongX ? 1 - cx : cx, ncz = alongX ? cz : 1 - cz;
     const to = new THREE.Vector3(ncx ? n.maxX : n.minX, 0, ncz ? n.maxZ : n.minZ);
@@ -140,7 +144,11 @@ class Walker {
 
 export class People {
   // `locals`: the city's own characters (Napoli's nonne and traffic cops), when it has them.
-  constructor(scene, locals = {}, count = 200) {
+  // `crowd`: an optional packed square, { blocks: ["bi,bj", ...], count } extra walkers who stay there.
+  constructor(scene, locals = {}, crowd = null, count = 200) {
+    const zone = crowd ? new Set(crowd.blocks) : null;
+    const zoned = crowd ? crowd.count : 0;
+    count += zoned;
     let seed = 4242;
     this.rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     const rnd = this.rnd;
@@ -172,7 +180,7 @@ export class People {
       armR: part(new THREE.CapsuleGeometry(0.06, 0.5, 3, 6).translate(0, -0.3, 0), (i) => look[i].shirt),
     };
     for (let i = 0; i < count; i++) {
-      const w = new Walker(rnd, 1.1 + rnd() * 0.6);
+      const w = new Walker(rnd, 1.1 + rnd() * 0.6, i < zoned ? zone : null);
       w.phase = rnd() * 6;
       w.crowd = i;
       this.walkers.push(w);

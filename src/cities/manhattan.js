@@ -171,7 +171,9 @@ export const manhattan = {
   name: 'Manhattan',
   price: 600,
   // Hard: the tightest clock, the fastest rivals, packed streets full of reckless cabs.
-  difficulty: { label: 'Hard', stars: 3, refSpeed: 25.6, slack: 1, rivals: 1.05, traffic: 3 },
+  difficulty: { label: 'Hard', stars: 3, refSpeed: 24.6, slack: 1.2, rivals: 1.05, traffic: 4 },
+  // Times Square is packed: crowds crossing back and forth between its blocks all the time.
+  crowd: { blocks: ['4,4', '4,5', '5,4', '5,5', '6,4', '6,5'], count: 260 },
   tagline: 'Yellow cabs, skyscrapers and Central Park',
 
   // Same street grid as every city: start at the pizzeria corner (0, 0); `detour` is the stretch

@@ -303,7 +303,7 @@ class Game {
     this.scene.add(this.cityRoot);
     this.world = new World(this.cityRoot, this.city);
     this.traffic = new Traffic(this.cityRoot, this.city.cars, this.city.difficulty.traffic);
-    this.people = new People(this.cityRoot, this.city.locals);
+    this.people = new People(this.cityRoot, this.city.locals, this.city.crowd);
     for (const c of this.people.statics) this.world.posts.push({ x: c.x, z: c.z, r: 0.6 });
     this.traffic.onHonk = (c) => { if (c.pos.distanceTo(this.player.pos) < 25 && this.state === 'race') this.audio.sfx('horn'); };
     this.look.setCity?.(this.city);
