@@ -127,3 +127,19 @@ button:active { transform: translateY(3px); }
   .g-panel { width: 100%; height: 58%; border-radius: 22px 22px 0 0; box-shadow: 0 -10px 30px #0006; }
   .g-head h2 { font-size: 30px; }
 }
+
+/* Player name and the Richest Riders board. */
+.menu-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.rider-name { font-family: Arial, sans-serif; font-size: 15px; background: none; border: none; padding: 4px; opacity: 0.9; text-decoration: underline dotted; }
+.name-input {
+  font: inherit; font-size: 28px; width: min(320px, 90vw); padding: 10px 16px; text-align: center; color: #6a040f;
+  border: 4px solid #6a040f; border-radius: 14px; background: #fff8e1; outline: none; -webkit-user-select: text; user-select: text;
+}
+.ranking-list { list-style: none; margin: 0; padding: 0; width: min(420px, 92vw); max-height: 56vh; overflow-y: auto; touch-action: pan-y; }
+.ranking-list li { display: flex; align-items: center; gap: 12px; padding: 7px 14px; margin: 4px 0; border-radius: 12px; background: #0003; font-size: 18px; }
+.ranking-list li b { width: 34px; text-align: right; color: #ffd23f; }
+.ranking-list li span { flex: 1; text-align: left; font-family: Arial, sans-serif; font-weight: bold; }
+.ranking-list li em { font-style: normal; color: #39ff88; }
+.ranking-list li.me { background: #ffd23f; color: #6a040f; }
+.ranking-list li.me b, .ranking-list li.me em { color: #6a040f; }
+.ranking-list li.top span::after { content: ' 👑'; }

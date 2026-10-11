@@ -49,3 +49,14 @@ export function showAd(type, { onStart, onEnd } = {}) {
     }
   });
 }
+
+// The CrazyGames account name when the player is logged in, else null.
+export async function username() {
+  try {
+    if (!sdk?.user?.isUserAccountAvailable) return null;
+    const u = await sdk.user.getUser();
+    return u?.username || null;
+  } catch {
+    return null;
+  }
+}

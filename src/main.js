@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Look, SUN_DIR } from './look.js';
 import { Fx } from './fx.js';
 import { People } from './people.js';
-import { CELL, DELIVERIES, RACE, PLAYER } from './config.js';
+import { CELL, DELIVERIES, RACE, PLAYER, RIVALS } from './config.js';
 import { loadModels } from './assets.js';
 import { World } from './world.js';
 import { Nav } from './nav.js';
@@ -15,6 +15,7 @@ import { Audio } from './audio.js';
 import * as SDK from './sdk.js';
 import { Profile } from './shop.js';
 import { Garage } from './garage.js';
+import { Ranking } from './ranking.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -24,6 +25,8 @@ const ui = {
 };
 
 const MIDGAME_INTERVAL = 120; // seconds between midgame ads
+
+const escapeHtml = (t) => t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 const store = {
   get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
@@ -72,10 +75,15 @@ class Game {
     this.profile = new Profile(store);
     this.player.equip(this.profile);
     this.garage = new Garage(this, this.profile);
+    this.earned = store.get('earned', this.totalTips);   // all-time tips, for the Richest Riders board
+    this.ranking = new Ranking(store, RIVALS);
+    this.playerName = store.get('name', null);
     this.deliveryIndex = store.get('delivery', 0) % DELIVERIES.length;
     this.showTotal();
     this.resetRace();
     this.bindUI();
+    this.showName();
+    if (!this.playerName) this.askName();
     addEventListener('resize', () => this.resize());
     this.resize();
     this.clock = new THREE.Clock();
@@ -96,6 +104,7 @@ class Game {
       this.addTips(this.lastTips);
       this.lastTips *= 2;
       this.renderResult();
+      this.showRankLine();
       $('double-btn').classList.add('hidden');
     });
     $('next-btn').onclick = async () => {
@@ -125,6 +134,18 @@ class Game {
         });
       };
     }
+    $('ranking-btn').onclick = () => { this.state = 'ranking'; this.renderRanking(); this.show($('ranking')); };
+    $('ranking-back').onclick = () => { this.state = 'menu'; this.show(ui.menu); };
+    $('rider-name').onclick = () => this.askName();
+    const done = () => {
+      this.playerName = $('name-input').value.trim().slice(0, 14) || 'Rider';
+      store.set('name', this.playerName);
+      this.showName();
+      this.state = 'menu';
+      this.show(ui.menu);
+    };
+    $('name-ok').onclick = done;
+    $('name-input').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') done(); });
     ui.muteBtn.onclick = () => this.toggleMute();
     addEventListener('keydown', (e) => {
       if (e.code === 'KeyM') this.toggleMute();
@@ -150,8 +171,29 @@ class Game {
     if (ok) grant();
   }
 
+  // First start (or tapping the name on the menu): ask for the rider's name, offering the
+  // CrazyGames account name when the player is logged in.
+  async askName() {
+    this.state = 'name';
+    this.show($('name-screen'));
+    const input = $('name-input');
+    input.value = this.playerName || (await SDK.username()) || '';
+    input.focus();
+  }
+
+  showName() {
+    $('rider-name').textContent = this.playerName ? `Rider: ${this.playerName} ✎` : '';
+  }
+
+  renderRanking() {
+    const rows = this.ranking.table(this.playerName || 'You', this.earned);
+    $('ranking-list').innerHTML = rows.map((r, i) =>
+      `<li class="${r.me ? 'me' : ''}${i === 0 ? ' top' : ''}"><b>${i + 1}</b><span>${escapeHtml(r.name)}</span><em>$${r.tips}</em></li>`).join('');
+    $('ranking-list').querySelector('.me')?.scrollIntoView({ block: 'center' });
+  }
+
   show(screen) {
-    for (const s of [ui.menu, ui.countdown, ui.timeup, ui.delivered]) s.classList.add('hidden');
+    for (const s of [ui.menu, ui.countdown, ui.timeup, ui.delivered, $('name-screen'), $('ranking')]) s.classList.add('hidden');
     if (screen) screen.classList.remove('hidden');
   }
 
@@ -194,7 +236,9 @@ class Game {
 
   addTips(n) {
     this.totalTips += n;
+    this.earned += n;
     store.set('tips', this.totalTips);
+    store.set('earned', this.earned);
     this.showTotal();
   }
 
@@ -403,10 +447,24 @@ class Game {
     this.lastPlace = place;
     this.lastTips = base + timeBonus + heatBonus + secretBonus;
     this.lastBreakdown = { base, timeBonus, heatBonus, secretBonus };
+    const before = this.ranking.place(this.playerName, this.earned);
+    // The rivals are paid by where they finished.
+    const mine = this.nav.remaining();
+    const order = [...this.rivals.map((r) => ({ name: r.def.name, left: r.remaining() })), { name: null, left: mine }].sort((a, b) => a.left - b.left);
+    this.ranking.afterDelivery(Object.fromEntries(order.map((o, i) => [o.name, i + 1])));
     this.addTips(this.lastTips);
+    this.rankBefore = before;
+    this.showRankLine();
     $('double-btn').classList.remove('hidden');
     this.renderResult();
     this.show(ui.delivered);
+  }
+
+  showRankLine() {
+    const now = this.ranking.place(this.playerName, this.earned);
+    const n = this.ranking.riders.length + 1;
+    const up = this.rankBefore - now;
+    $('rank-line').textContent = `Richest riders: #${now} of ${n}${up > 0 ? `  ▲ up ${up}` : ''}`;
   }
 
   renderResult() {

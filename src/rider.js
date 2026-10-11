@@ -68,36 +68,8 @@ export function makeRider(shirt = 0xffffff, cap = 0xd62828, riderId = 'rider', l
 // thermal delivery bag on the back.
 function dress(rig, look) {
   const m = rig.m;
-  // The head's bounds in the bind pose, from the vertices above the neck.
-  const pos = rig.mesh.geometry.attributes.position;
-  const head = new THREE.Box3(), v = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) {
-    v.fromBufferAttribute(pos, i);
-    if (v.y > m.neckY + 0.03 * m.H && Math.abs(v.x) < m.sx * 1.6) head.expandByPoint(v);
-  }
-  const size = head.getSize(new THREE.Vector3());
-  const r = Math.max(size.x, size.z) * 0.56;
-  const centre = head.getCenter(new THREE.Vector3()).sub(rig.b.head.getWorldPosition(new THREE.Vector3()).applyMatrix4(rig.model.matrixWorld.clone().invert()));
   const h = look.helmet;
-  if (h && h.color !== undefined) {
-    const helmet = new THREE.Group();
-    const shell = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.56),
-      mat(h.pizza ? 0xffffff : h.color, h.metal ? { metalness: 0.9, roughness: 0.25 } : { roughness: 0.35, map: h.pizza ? pizzaTexture() : null }));
-    helmet.add(shell);
-    if (h.visor) {
-      const visor = new THREE.Mesh(new THREE.SphereGeometry(r * 1.03, 16, 8, -Math.PI * 0.3, Math.PI * 0.6, Math.PI * 0.34, Math.PI * 0.12),
-        mat(0x1a2430, { metalness: 0.7, roughness: 0.1 }));
-      visor.rotation.y = Math.PI / 2;   // the gap in phi faces +z, the front
-      helmet.add(visor);
-    }
-    if (h.stripe) {
-      const stripe = new THREE.Mesh(new THREE.TorusGeometry(r * 1.0, r * 0.05, 6, 24, Math.PI), mat(h.stripe));
-      stripe.rotation.y = Math.PI / 2;
-      helmet.add(stripe);
-    }
-    helmet.position.copy(centre).add(new THREE.Vector3(0, -size.y * 0.04, -size.z * 0.02));
-    rig.b.head.add(helmet);
-  }
+  if (h && h.color !== undefined) rig.b.head.add(helmet(rig, h));
 
   // Delivery bag on the back, hung from the chest bone.
   if (rig.b.chest && !m.seated) {
@@ -130,6 +102,95 @@ function dress(rig, look) {
     material.customProgramCacheKey = () => 'jacket';
     rig.mesh.material = material;
   }
+}
+
+// A cycling helmet fitted to this model's head: an ellipsoid shell sized from the skull (not the
+// cap's brim), its rim higher at the brow than at the nape, with vents, a peak and chin straps.
+// Built in the head bone's space so it turns with the head.
+function helmet(rig, h) {
+  const m = rig.m;
+  const pos = rig.mesh.geometry.attributes.position;
+  const v = new THREE.Vector3();
+  let top = -Infinity, back = Infinity, front = -Infinity, half = 0;
+  const skullY = m.neckY + 0.25 * (m.minY + m.H - m.neckY);
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    if (v.y < m.neckY || Math.abs(v.x) > m.sx * 1.6) continue;
+    top = Math.max(top, v.y);
+    if (v.y > skullY) { back = Math.min(back, v.z); front = Math.max(front, v.z); half = Math.max(half, Math.abs(v.x)); }
+  }
+  const headH = top - m.neckY;
+  const rx = half * 1.1, ry = rx * 0.95, rz = rx * 1.18;
+  const bone = rig.b.head.getWorldPosition(new THREE.Vector3()).applyMatrix4(rig.model.matrixWorld.clone().invert());
+  const centre = new THREE.Vector3(0, top + 0.03 * headH - ry, back - 0.02 * headH + rz).sub(bone);
+
+  const g = new THREE.Group();
+  const shellGeo = new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, 0, Math.PI * 0.6);
+  shellGeo.rotateX(-0.32);   // rim up over the brow, down over the nape
+  shellGeo.scale(rx, ry, rz);
+  const finish = h.metal ? { metalness: 0.85, roughness: 0.22 } : { roughness: 0.3, metalness: 0.05 };
+  const shell = new THREE.Mesh(shellGeo, new THREE.MeshStandardMaterial({ map: helmetTexture(h), side: THREE.DoubleSide, ...finish }));
+  g.add(shell);
+  // Peak over the brow (it also hides the cap's brim underneath).
+  const reach = Math.max(0.25 * rz, front - (back + 2 * rz) + 0.06 * headH);
+  const peakGeo = new THREE.CircleGeometry(1, 20, 0, Math.PI);
+  peakGeo.rotateX(-Math.PI / 2);
+  const peak = new THREE.Mesh(peakGeo, new THREE.MeshStandardMaterial({ color: h.visor ? 0x1a2430 : h.color, side: THREE.DoubleSide, roughness: 0.4, metalness: h.visor ? 0.5 : 0 }));
+  peak.scale.set(rx * 0.86, 1, reach + rz * 0.5);
+  peak.rotation.x = 0.12;
+  peak.position.set(0, -ry * 0.2, rz * 0.55);
+  g.add(peak);
+  // Chin straps from the rim to under the jaw.
+  for (const sx of [-1, 1]) {
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.02 * headH, 0.62 * headH, 0.035 * headH), mat(0x1c1c1c));
+    strap.position.set(sx * rx * 0.86, -ry * 0.62, rz * 0.12);
+    strap.rotation.x = 0.25;
+    strap.rotation.z = -sx * 0.12;
+    g.add(strap);
+  }
+  g.position.copy(centre);
+  return g;
+}
+
+// Shell texture: around = u (front at 0.25), crown at the top rows, rim at the bottom.
+function helmetTexture(h) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 128;
+  const g = c.getContext('2d');
+  if (h.pizza) {
+    g.drawImage(pizzaTexture().image, 0, 0, 256, 128);
+    g.drawImage(pizzaTexture().image, 256, 0, 256, 128);
+  } else {
+    g.fillStyle = `#${h.color.toString(16).padStart(6, '0')}`;
+    g.fillRect(0, 0, 512, 128);
+    // Soft highlight band, then the stripe for the Napoli helmet.
+    const shade = g.createLinearGradient(0, 0, 0, 128);
+    shade.addColorStop(0, 'rgba(255,255,255,0.18)');
+    shade.addColorStop(1, 'rgba(0,0,0,0.18)');
+    g.fillStyle = shade;
+    g.fillRect(0, 0, 512, 128);
+    if (h.stripe) {
+      g.fillStyle = `#${h.stripe.toString(16).padStart(6, '0')}`;
+      for (const u of [0.25, 0.75]) g.fillRect(u * 512 - 9, 0, 18, 128);
+    }
+  }
+  // Vents: dark slots front to back, either side of the centre line.
+  g.fillStyle = 'rgba(15,15,18,0.9)';
+  for (const u of [0.17, 0.33, 0.67, 0.83]) {
+    for (const [y0, y1] of [[20, 70]]) {
+      g.beginPath();
+      g.roundRect(u * 512 - 7, y0, 14, y1 - y0, 7);
+      g.fill();
+    }
+  }
+  for (const u of [0.0, 0.5]) { g.beginPath(); g.roundRect(u * 512 - 6, 30, 12, 50, 6); g.fill(); g.beginPath(); g.roundRect(512 - 6, 30, 12, 50, 6); g.fill(); }
+  // Rim trim.
+  g.fillStyle = '#1c1c1c';
+  g.fillRect(0, 118, 512, 10);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
 }
 
 let pizzaTex;

@@ -33,7 +33,11 @@
     <h1>PIZZA<br />DRIVER</h1>
     <p id="subtitle" class="sub">Napoli</p>
     <button id="play-btn" class="big">RIDE!</button>
-    <button id="garage-btn" class="garage-open">GARAGE</button>
+    <div class="menu-row">
+      <button id="garage-btn" class="garage-open">GARAGE</button>
+      <button id="ranking-btn" class="garage-open">RICHEST RIDERS</button>
+    </div>
+    <button id="rider-name" class="rider-name"></button>
     <p class="hint desktop-only">← → steer · ↓ brake / reverse (hold while steering to drift) · SPACE wheelie, trick in the air · jump ramps for TURBO · Z / X kick · M mute</p>
     <p class="hint touch-only">Hold left / right to steer · DRIFT while steering · TRICK for wheelies and air spins · jump ramps for TURBO · KICK the rivals</p>
     <p id="total-tips" class="tips"></p>
@@ -51,9 +55,24 @@
   <div id="delivered" class="screen hidden">
     <h2>DELIVERED!</h2>
     <div id="result" class="result"></div>
+    <p id="rank-line" class="tips"></p>
     <button id="double-btn" class="big ad">▶ DOUBLE TIPS</button>
     <button id="next-btn">Next delivery</button>
     <button id="garage-btn2" class="garage-open">GARAGE</button>
+  </div>
+
+  <div id="name-screen" class="screen hidden">
+    <h2>WHO'S RIDING?</h2>
+    <p class="sub">Your name goes on the Richest Riders board.</p>
+    <input id="name-input" class="name-input" maxlength="14" autocomplete="off" spellcheck="false" placeholder="Your name" />
+    <button id="name-ok" class="big">LET'S GO!</button>
+  </div>
+
+  <div id="ranking" class="screen hidden">
+    <h2>RICHEST RIDERS</h2>
+    <p class="sub">Napoli · all-time tips</p>
+    <ol id="ranking-list" class="ranking-list"></ol>
+    <button id="ranking-back" class="big">BACK</button>
   </div>
 
   <div id="garage" class="garage hidden">
