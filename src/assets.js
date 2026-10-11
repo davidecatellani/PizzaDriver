@@ -78,7 +78,7 @@ function tallEndIsBack(obj) {
 }
 
 export function mat(color, extra = {}) {
-  return new THREE.MeshLambertMaterial({ color, ...extra });
+  return new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0, ...extra });
 }
 
 export function box(w, h, d, color) {

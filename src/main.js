@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { Look, SUN_DIR } from './look.js';
+import { Fx } from './fx.js';
 import { CELL, DELIVERIES, RACE, PLAYER } from './config.js';
 import { loadModels } from './assets.js';
 import { World } from './world.js';
@@ -32,20 +34,22 @@ class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x87c7f0);
-    this.scene.fog = new THREE.Fog(0x87c7f0, 120, 420);
     this.camera = new THREE.PerspectiveCamera(65, 1, 0.5, 1200);
+    this.look = new Look(this.renderer, this.scene, this.camera);
 
-    this.scene.add(new THREE.HemisphereLight(0xfff4e0, 0x6b7a8f, 1.4));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+    this.scene.add(new THREE.HemisphereLight(0xdfeeff, 0x8a7560, 0.9));
+    const sun = new THREE.DirectionalLight(0xffe2b8, 3.2);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 200 });
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 0.04;
+    Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 260 });
     this.scene.add(sun, sun.target);
     this.sun = sun;
 
     this.world = new World(this.scene);
     this.nav = new Nav(this.scene);
+    this.fx = new Fx(this.scene);
     this.minimap = new Minimap($('minimap'));
     this.player = new Player(this.scene, this.world);
     this.rivals = makeRivals(this.scene, this.world);
@@ -152,6 +156,7 @@ class Game {
     ui.boostBtn.classList.remove('hidden');
     $('brake-btn').classList.remove('hidden');
     this.state = 'countdown';
+    this.look.watch = true;
     this.countdown = 3;
     ui.count.textContent = '3';
     this.audio.sfx('tick');
@@ -184,7 +189,7 @@ class Game {
   frame() {
     const dt = Math.min(0.05, this.clock.getDelta());
     if (!this.adPlaying) this.update(dt);
-    this.renderer.render(this.scene, this.camera);
+    this.look.render();
   }
 
   update(dt) {
@@ -208,6 +213,7 @@ class Game {
 
     if (racing) this.raceLogic(dt);
     this.handleEvents();
+    this.fx.update(dt, this.player);
     this.updateHUD();
     this.updateCamera(dt);
 
@@ -310,10 +316,11 @@ class Game {
 
   handleEvents() {
     for (const e of this.player.events) {
-      if (e.type === 'crash') this.audio.sfx('crash');
+      if (e.type === 'crash') { this.audio.sfx('crash'); this.fx.sparks(this.player.pos); }
       if (e.type === 'jump') this.audio.sfx('jump');
       if (e.type === 'drift') { this.audio.sfx('land'); this.toast('DRIFT! +BOOST'); }
       if (e.type === 'land') {
+        this.fx.dust(this.player.pos);
         if (e.clean) {
           this.audio.sfx('land');
           this.toast(e.airTime > 0.9 ? 'BIG AIR! +BOOST' : 'CLEAN LANDING! +BOOST');
@@ -345,7 +352,7 @@ class Game {
     const fov = 65 + (p.boosting ? 12 : 0) + Math.min(8, p.speed * 0.15);
     this.camera.fov += (fov - this.camera.fov) * k;
     this.camera.updateProjectionMatrix();
-    this.sun.position.set(p.pos.x + 30, 60, p.pos.z + 20);
+    this.sun.position.copy(p.pos).addScaledVector(SUN_DIR, 120);
     this.sun.target.position.copy(p.pos);
   }
 
@@ -353,6 +360,8 @@ class Game {
     this.renderer.setSize(innerWidth, innerHeight, false);
     this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
+    this.look.setSize(innerWidth, innerHeight);
+    this.fx.setHeight(innerHeight);
   }
 }
 
