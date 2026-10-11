@@ -1,8 +1,6 @@
 import * as THREE from 'three';
-import { CELL, PLAYER, RIVALS, RIVAL_PATH } from './config.js';
+import { CELL, PLAYER, RIVALS } from './config.js';
 import { makeRider } from './rider.js';
-
-const PATH = RIVAL_PATH.map(([x, z]) => new THREE.Vector2(x * CELL, z * CELL));
 
 export class Rival {
   constructor(scene, world, def, index) {
@@ -11,12 +9,14 @@ export class Rival {
     this.lane = -0.5 + index * 2.5;      // spread across the street, right of the player
     this.mesh = makeRider(def.color, 0x222222, `rival_${(index % 2) + 1}`);
     scene.add(this.mesh);
-    this.reset();
   }
 
-  reset() {
-    this.pos = new THREE.Vector3(PATH[0].x + this.lane, 0, PATH[0].y - 4);
-    this.heading = 0;
+  reset(path) {
+    this.path = path.map(([x, z]) => new THREE.Vector2(x * CELL, z * CELL));
+    const [p0, p1] = this.path;
+    const dir = p1.clone().sub(p0).normalize();
+    this.pos = new THREE.Vector3(p0.x - dir.x * 4 + dir.y * this.lane, 0, p0.y - dir.y * 4 - dir.x * this.lane);
+    this.heading = Math.atan2(dir.x, dir.y);
     this.speed = 0;
     this.target = 1;
     this.stun = 0;
@@ -26,8 +26,8 @@ export class Rival {
 
   remaining() {
     if (this.finished) return -1;
-    let d = Math.hypot(PATH[this.target].x - this.pos.x, PATH[this.target].y - this.pos.z);
-    for (let i = this.target; i < PATH.length - 1; i++) d += PATH[i].distanceTo(PATH[i + 1]);
+    let d = Math.hypot(this.path[this.target].x - this.pos.x, this.path[this.target].y - this.pos.z);
+    for (let i = this.target; i < this.path.length - 1; i++) d += this.path[i].distanceTo(this.path[i + 1]);
     return d;
   }
 
@@ -39,8 +39,8 @@ export class Rival {
     this.speed += THREE.MathUtils.clamp(goal - this.speed, -40 * dt, PLAYER.accel * dt);
 
     // Aim at the waypoint, offset into this rider's lane.
-    const t = PATH[this.target];
-    const prev = PATH[this.target - 1];
+    const t = this.path[this.target];
+    const prev = this.path[this.target - 1];
     const dir = new THREE.Vector2(t.x - prev.x, t.y - prev.y).normalize();
     const side = new THREE.Vector2(dir.y, -dir.x);
     const ax = t.x + side.x * this.lane, az = t.y + side.y * this.lane;
@@ -57,7 +57,7 @@ export class Rival {
     this.pos.y = this.world.groundHeight(this.pos.x, this.pos.z);
 
     if (Math.hypot(ax - this.pos.x, az - this.pos.z) < 5) {
-      if (this.target === PATH.length - 1) this.finished = true;
+      if (this.target === this.path.length - 1) this.finished = true;
       else this.target++;
     }
     this.sync();

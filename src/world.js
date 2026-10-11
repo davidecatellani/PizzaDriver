@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CELL, STREET, GRID, CHECKPOINTS, CUSTOMER, START } from './config.js';
+import { CELL, STREET, GRID } from './config.js';
 import { box, mat, makeObject } from './assets.js';
 
 const HALF = STREET / 2;
@@ -55,7 +55,7 @@ export class World {
     this.buildPalazzo();
     this.buildRamps();
     this.buildLandmarks();
-    this.buildCheckpoints();
+    this.checkpoints = [];
   }
 
   addCollider(minX, maxX, minZ, maxZ) {
@@ -294,21 +294,22 @@ export class World {
     v.position.set(GRID * CELL * 0.5, -5, -260);
     this.scene.add(v);
 
-    // Customer: green door + beam of light.
-    const [cx, cz] = CUSTOMER;
-    this.customerPos = new THREE.Vector3(cx * CELL, 0, cz * CELL);
+    // Customer marker: a beam of light, moved to each delivery's address.
+    this.customerPos = new THREE.Vector3();
     const beam = new THREE.Mesh(
       new THREE.CylinderGeometry(3, 3, 60, 16, 1, true),
       new THREE.MeshBasicMaterial({ color: 0x55ff88, transparent: true, opacity: 0.25, depthWrite: false }),
     );
-    beam.position.set(cx * CELL, 30, cz * CELL);
+    beam.position.y = 30;
     this.scene.add(beam);
     this.customerBeam = beam;
   }
 
-  buildCheckpoints() {
+  // Builds the checkpoint rings and customer marker for one delivery.
+  setRoute(delivery) {
+    for (const c of this.checkpoints) this.scene.remove(c.mesh);
     this.checkpoints = [];
-    const pts = [START, ...CHECKPOINTS];
+    const pts = [[0, 0], ...delivery.checkpoints];
     for (let i = 1; i < pts.length; i++) {
       const [px, pz] = pts[i - 1];
       const [x, z] = pts[i];
@@ -326,5 +327,9 @@ export class World {
       this.scene.add(g);
       this.checkpoints.push({ pos: new THREE.Vector3(x * CELL, 0, z * CELL), mesh: g, ring });
     }
+    const [cx, cz] = delivery.customer;
+    this.customerPos.set(cx * CELL, 0, cz * CELL);
+    this.customerBeam.position.x = cx * CELL;
+    this.customerBeam.position.z = cz * CELL;
   }
 }

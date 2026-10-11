@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CELL, CHECKPOINTS, CUSTOMER, START, RACE, PLAYER } from './config.js';
+import { CELL, DELIVERIES, RACE, PLAYER } from './config.js';
 import { loadModels } from './assets.js';
 import { World } from './world.js';
 import { Player } from './player.js';
@@ -13,11 +13,9 @@ const $ = (id) => document.getElementById(id);
 const ui = {
   hud: $('hud'), time: $('time'), position: $('position'), heat: $('heat'), boost: $('boost'), toast: $('toast'),
   menu: $('menu'), countdown: $('countdown'), count: $('count'), timeup: $('timeup'), delivered: $('delivered'),
-  result: $('result'), boostBtn: $('boost-btn'), muteBtn: $('mute-btn'), totalTips: $('total-tips'),
+  result: $('result'), subtitle: $('subtitle'), boostBtn: $('boost-btn'), muteBtn: $('mute-btn'), totalTips: $('total-tips'),
 };
 
-// Route the player is scored on: checkpoints, then the customer. Used for ranking.
-const ROUTE = [START, ...CHECKPOINTS, CUSTOMER].map(([x, z]) => new THREE.Vector2(x * CELL, z * CELL));
 const MIDGAME_INTERVAL = 120; // seconds between midgame ads
 
 const store = {
@@ -63,6 +61,7 @@ class Game {
     this.state = 'menu';
     this.lastAd = performance.now() / 1000;
     this.totalTips = store.get('tips', 0);
+    this.deliveryIndex = store.get('delivery', 0) % DELIVERIES.length;
     this.showTotal();
     this.resetRace();
     this.bindUI();
@@ -93,6 +92,8 @@ class Game {
         await SDK.showAd('midgame', this.adCallbacks());
         this.lastAd = performance.now() / 1000;
       }
+      this.deliveryIndex = (this.deliveryIndex + 1) % DELIVERIES.length;
+      store.set('delivery', this.deliveryIndex);
       this.resetRace();
       this.startRace();
     };
@@ -127,8 +128,13 @@ class Game {
   }
 
   resetRace() {
-    this.player.reset(START[0] * CELL - 4, START[1] * CELL - 5, 0);
-    for (const r of this.rivals) r.reset();
+    const d = DELIVERIES[this.deliveryIndex];
+    // Route the player is scored on: pizzeria, checkpoints, then the customer. Used for ranking.
+    this.route = [[0, 0], ...d.checkpoints, d.customer].map(([x, z]) => new THREE.Vector2(x * CELL, z * CELL));
+    this.world.setRoute(d);
+    const dir = this.route[1].clone().sub(this.route[0]).normalize();
+    this.player.reset(-dir.x * 5 - dir.y * 4, -dir.y * 5 + dir.x * 4, Math.atan2(dir.x, dir.y));
+    for (const r of this.rivals) r.reset(d.rivals);
     this.timeLeft = RACE.startTime;
     this.cpIndex = 0;
     this.usedSecret = false;
@@ -136,6 +142,7 @@ class Game {
     this.lastTick = 99;
     this.world.checkpoints.forEach((c, i) => { c.mesh.visible = i === 0; });
     this.world.customerBeam.visible = false;
+    ui.subtitle.textContent = `Napoli · Delivery ${this.deliveryIndex + 1}/${DELIVERIES.length}: ${d.name}`;
     this.updateCamera(1);
   }
 
@@ -173,8 +180,8 @@ class Game {
   playerRemaining() {
     const target = this.cpIndex + 1;
     const p = this.player.pos;
-    let d = Math.hypot(ROUTE[target].x - p.x, ROUTE[target].y - p.z);
-    for (let i = target; i < ROUTE.length - 1; i++) d += ROUTE[i].distanceTo(ROUTE[i + 1]);
+    let d = Math.hypot(this.route[target].x - p.x, this.route[target].y - p.z);
+    for (let i = target; i < this.route.length - 1; i++) d += this.route[i].distanceTo(this.route[i + 1]);
     return d;
   }
 

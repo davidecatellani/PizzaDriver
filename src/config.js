@@ -24,20 +24,41 @@ export const RACE = {
   hurryTime: 6,                  // music speeds up below this
 };
 
-// Checkpoints in intersection coordinates (multiplied by CELL).
-// The tunnel through the palazzo at row 3 is the secret shortcut between CP2 and CP3.
-export const CHECKPOINTS = [
-  [0, 3],
-  [2, 3],
-  [4, 3],
-  [4, 5],
-];
-export const CUSTOMER = [6, 5];
-export const START = [0, 0];
-
-// Rivals follow streets only, so they go around the palazzo.
-export const RIVAL_PATH = [
-  [0, 0], [0, 3], [2, 3], [2, 4], [4, 4], [4, 3], [4, 5], [6, 5],
+// Napoli deliveries, in intersection coordinates (multiplied by CELL). Every delivery starts at the
+// pizzeria corner (0, 0). Checkpoints are passed in order; rivals follow `rivals` along the streets.
+// The palazzo covers blocks (2..3, 2..3): its tunnel along row 3 is the secret shortcut,
+// so rival paths never cross its inside lines (x = 3 or z = 3 between 2 and 4).
+export const DELIVERIES = [
+  {
+    name: 'Lungomare',
+    checkpoints: [[0, 3], [2, 3], [4, 3], [4, 5]],
+    customer: [6, 5],
+    rivals: [[0, 0], [0, 3], [2, 3], [2, 4], [4, 4], [4, 3], [4, 5], [6, 5]],
+  },
+  {
+    name: 'Piazza del Gesù',
+    checkpoints: [[3, 0], [3, 2], [1, 2], [1, 6]],
+    customer: [2, 6],
+    rivals: [[0, 0], [3, 0], [3, 2], [1, 2], [1, 6], [2, 6]],
+  },
+  {
+    name: 'Mercato',
+    checkpoints: [[0, 1], [4, 1], [4, 3], [2, 3], [2, 6]],
+    customer: [0, 6],
+    rivals: [[0, 0], [0, 1], [4, 1], [4, 3], [4, 4], [2, 4], [2, 3], [2, 6], [0, 6]],
+  },
+  {
+    name: 'Quartieri Spagnoli',
+    checkpoints: [[6, 0], [6, 3], [5, 3], [5, 6]],
+    customer: [3, 6],
+    rivals: [[0, 0], [6, 0], [6, 3], [5, 3], [5, 6], [3, 6]],
+  },
+  {
+    name: 'Stadio',
+    checkpoints: [[0, 5], [3, 5], [3, 4], [6, 4], [6, 1]],
+    customer: [5, 0],
+    rivals: [[0, 0], [0, 5], [3, 5], [3, 4], [6, 4], [6, 1], [6, 0], [5, 0]],
+  },
 ];
 
 export const RIVALS = [
