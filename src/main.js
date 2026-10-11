@@ -26,6 +26,10 @@ const ui = {
 
 const MIDGAME_INTERVAL = 120; // seconds between midgame ads
 
+// 75.34 -> "1:15.3"
+const clock = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+const RECORD_BONUS = 10;   // tips for beating a delivery's best time
+
 const escapeHtml = (t) => t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 const store = {
@@ -78,6 +82,7 @@ class Game {
     this.earned = store.get('earned', this.totalTips);   // all-time tips, for the Richest Riders board
     this.ranking = new Ranking(store, RIVALS);
     this.playerName = store.get('name', null);
+    this.records = store.get('records', {});   // best delivery time in seconds, by delivery index
     this.deliveryIndex = store.get('delivery', 0) % DELIVERIES.length;
     this.showTotal();
     this.resetRace();
@@ -215,6 +220,9 @@ class Game {
     this.world.checkpoints.forEach((c, i) => { c.mesh.visible = i === 0; });
     this.world.customerBeam.visible = false;
     ui.subtitle.textContent = `Napoli · Delivery ${this.deliveryIndex + 1}/${DELIVERIES.length}: ${d.name}`;
+    const best = this.records[this.deliveryIndex];
+    $('record-line').textContent = best ? `🏆 Record: ${clock(best)}` : '';
+    $('hud-best').textContent = best ? `BEST ${clock(best)}` : '';
     this.updateCamera(1);
   }
 
@@ -454,9 +462,19 @@ class Game {
     const timeBonus = Math.round(this.timeLeft);
     const heatBonus = Math.round(this.player.heat / 10);
     const secretBonus = 5 * this.secretsFound.size;
+    // Fastest delivery on this route.
+    const best = this.records[this.deliveryIndex];
+    const record = !best || this.raceTime < best;
+    if (record) {
+      this.records[this.deliveryIndex] = this.raceTime;
+      store.set('records', this.records);
+      this.toast('NEW RECORD!', 2500);
+    }
+    this.lastRecord = { time: this.raceTime, best, record };
+    const recordBonus = record && best ? RECORD_BONUS : 0;
     this.lastPlace = place;
-    this.lastTips = base + timeBonus + heatBonus + secretBonus;
-    this.lastBreakdown = { base, timeBonus, heatBonus, secretBonus };
+    this.lastTips = base + timeBonus + heatBonus + secretBonus + recordBonus;
+    this.lastBreakdown = { base, timeBonus, heatBonus, secretBonus, recordBonus };
     const before = this.ranking.place(this.playerName, this.earned);
     // The rivals are paid by where they finished.
     const mine = this.nav.remaining();
@@ -485,7 +503,12 @@ class Game {
       Time left: <b>${b.timeBonus}s</b> (+$${b.timeBonus})<br>
       Pizza heat: <b>${Math.round(this.player.heat)}%</b> (+$${b.heatBonus})<br>
       ${b.secretBonus ? `Secret shortcuts: <b>${b.secretBonus / 5}</b> (+$${b.secretBonus})<br>` : ''}
+      ${b.recordBonus ? `New record bonus (+$${b.recordBonus})<br>` : ''}
       Tips: <b>$${this.lastTips}</b>`;
+    const r = this.lastRecord;
+    $('record-result').innerHTML = r.record
+      ? `<span class="new-record">🏆 NEW RECORD ${clock(r.time)}</span>${r.best ? ` <small>(${(r.time - r.best).toFixed(1)}s)</small>` : ''}`
+      : `Time ${clock(r.time)} · Record ${clock(r.best)} <small>(+${(r.time - r.best).toFixed(1)}s)</small>`;
   }
 
   // Side kicks, as in Radical Bikers: the player kicks with Z / X (or KICK), rivals riding
@@ -572,6 +595,9 @@ class Game {
     if (this.state === 'menu') return;
     const t = Math.max(0, Math.ceil(this.timeLeft));
     ui.time.textContent = t;
+    $('hud-run').textContent = clock(this.raceTime);
+    const best = this.records[this.deliveryIndex];
+    $('hud-run').classList.toggle('over', !!best && this.raceTime > best);   // too slow for the record now
     ui.time.classList.toggle('hurry', this.timeLeft < RACE.hurryTime);
     const place = this.rank();
     const suf = ['st', 'nd', 'rd', 'th'][place - 1];
