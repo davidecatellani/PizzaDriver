@@ -56,6 +56,7 @@ class Game {
     this.rivals = makeRivals(this.scene, this.world);
     this.traffic = new Traffic(this.scene);
     this.people = new People(this.scene);
+    for (const c of this.people.statics) this.world.posts.push({ x: c.x, z: c.z, r: 0.6 });
     this.traffic.onHonk = (c) => { if (c.pos.distanceTo(this.player.pos) < 25 && this.state === 'race') this.audio.sfx('horn'); };
     this.input = new Input();
     this.audio = new Audio();
@@ -157,6 +158,7 @@ class Game {
     this.show(ui.countdown);
     ui.hud.classList.remove('hidden');
     ui.boostBtn.classList.remove('hidden');
+    ui.boostBtn.textContent = 'TRICK';
     $('brake-btn').classList.remove('hidden');
     $('kick-btn').classList.remove('hidden');
     this.state = 'countdown';
@@ -395,15 +397,16 @@ class Game {
         }
         want = best ? best.side : 1;
       }
-      if (p.startKick(want)) this.audio.sfx('jump');
+      if (p.startKick(want)) this.audio.sfx('whoosh');
     }
+    for (const k of [p, ...this.rivals]) if (k.kick) this.fx.kickTrail(k);
     for (const r of this.rivals) {
       if (r.finished) continue;
       if (lands(p, r)) {
         p.kick.hit = true;
         r.hitBy(p.pos.x, p.pos.z, 13, 1.5);
         this.audio.sfx('bump');
-        this.fx.sparks(r.pos, 14);
+        this.fx.impact(r.pos);
         this.shake = 0.3;
         this.toast('KICK!', 600);
       }
@@ -411,12 +414,13 @@ class Game {
       const { lateral, along } = beside(r, p);
       if (!r.kick && !r.stun && Math.abs(lateral) > 0.6 && Math.abs(lateral) < 3 && Math.abs(along) < 2
           && Math.random() < dt * 1.6 * (r.def.aggression ?? 0.5)) {
-        r.startKick(Math.sign(lateral));
+        if (r.startKick(Math.sign(lateral))) this.audio.sfx('whoosh');
         r.kickCd = 1.2 + Math.random() * 1.5;
       }
       if (lands(r, p)) {
         r.kick.hit = true;
         p.hitBy(r.pos.x, r.pos.z, 9, 6, 0.7);
+        this.fx.impact(p.pos);
         this.shake = 0.35;
         this.toast(`${r.def.name.toUpperCase()} KICKED YOU!`, 800);
       }
@@ -427,13 +431,19 @@ class Game {
     for (const e of this.player.events) {
       if (e.type === 'crash') { this.audio.sfx('crash'); this.fx.sparks(this.player.pos); }
       if (e.type === 'hit') { this.audio.sfx('bump'); this.fx.sparks(this.player.pos, 14); }
-      if (e.type === 'jump') this.audio.sfx('jump');
-      if (e.type === 'drift') { this.audio.sfx('land'); this.toast('DRIFT! +BOOST'); }
+      if (e.type === 'jump') { this.audio.sfx('jump'); if (e.wheelie) this.toast('WHEELIE JUMP!', 700); }
+      if (e.type === 'trick') this.audio.sfx('checkpoint');
+      if (e.type === 'drift') { this.audio.sfx('land'); this.toast('DRIFT! +TURBO'); }
       if (e.type === 'land') {
-        this.fx.dust(this.player.pos);
-        if (e.clean) {
+        this.fx.dust(this.player.pos, e.wipeout ? 30 : 18);
+        if (e.wipeout) {
+          this.audio.sfx('crash');
+          this.shake = 0.5;
+          this.toast('WIPEOUT!', 900);
+        } else if (e.clean) {
           this.audio.sfx('land');
-          this.toast(e.airTime > 0.9 ? 'BIG AIR! +BOOST' : 'CLEAN LANDING! +BOOST');
+          const label = e.trick ? 'TRICK!' : e.airTime > 0.9 ? 'BIG AIR!' : 'CLEAN LANDING!';
+          this.toast(`${label} +${e.gained.toFixed(1)}s TURBO`);
         }
       }
     }

@@ -67,7 +67,8 @@ function landmarks(pos) {
   return m;
 }
 
-const smooth = (a, b, x) => THREE.MathUtils.smoothstep(x, a, b);
+// 0 at a, 1 at b, smooth in between; a may be above b.
+const smooth = (a, b, x) => (a < b ? THREE.MathUtils.smoothstep(x, a, b) : 1 - THREE.MathUtils.smoothstep(x, b, a));
 
 // Bone list: name, parent, position in model space.
 function boneDefs(m) {

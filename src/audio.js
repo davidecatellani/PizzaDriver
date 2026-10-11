@@ -174,6 +174,21 @@ export class Audio {
       this.noiseHit(t, 0.18, 0.7, 'lowpass', 300, this.master);
       this.fx(110, t, 0.12, 'triangle', 0.25);
       this.noiseHit(t + 0.02, 0.12, 0.25, 'bandpass', 2500, this.master);
+    } else if (name === 'whoosh') {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.noise;
+      const f = this.ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.Q.value = 2;
+      f.frequency.setValueAtTime(400, t);
+      f.frequency.exponentialRampToValueAtTime(2500, t + 0.2);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.5, t + 0.08);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+      src.connect(f).connect(g).connect(this.master);
+      src.start(t);
+      src.stop(t + 0.26);
     } else if (name === 'hey') {
       this.fx(NOTE(81), t, 0.08, 'sine', 0.12);
       this.fx(NOTE(88), t + 0.09, 0.12, 'sine', 0.12);

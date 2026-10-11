@@ -57,6 +57,7 @@ export class World {
   constructor(scene) {
     this.scene = scene;
     this.colliders = [];
+    this.posts = [];            // thin round obstacles (lamp posts): riders slide round them
     this.ramps = [];
     this.rnd = (() => { let seed = 99; return () => ((seed = (seed * 16807) % 2147483647) / 2147483647); })();
     this.facades = [[], [], [], []];   // one list per facade texture variant
@@ -318,11 +319,12 @@ export class World {
         if (inPalazzo(bi, bj)) continue;
         const minX = bi * CELL + HALF, maxX = (bi + 1) * CELL - HALF;
         const minZ = bj * CELL + HALF, maxZ = (bj + 1) * CELL - HALF;
-        for (const [x, z] of [[minX + 1, minZ + 1], [maxX - 1, maxZ - 1], [minX + 1, maxZ - 1], [maxX - 1, minZ + 1]]) {
+        // At the kerb, so a rider never gets wedged between a post and a wall.
+        for (const [x, z] of [[minX + 0.5, minZ + 0.5], [maxX - 0.5, maxZ - 0.5], [minX + 0.5, maxZ - 0.5], [maxX - 0.5, minZ + 0.5]]) {
           // Arm points out over the street.
           const toStreetX = x < (minX + maxX) / 2 ? -1 : 1, toStreetZ = z < (minZ + maxZ) / 2 ? -1 : 1;
           lamps.push({ x, z, rot: Math.atan2(toStreetX, toStreetZ) });
-          this.addCollider(x - 0.25, x + 0.25, z - 0.25, z + 0.25);
+          this.posts.push({ x, z, r: 0.25 });
         }
       }
     }

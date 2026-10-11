@@ -10,16 +10,21 @@ export const PLAYER = {
   accel: 22,
   brake: 45,
   turnRate: 3.0,                 // rad/s at low speed
+  reverse: 7,                    // m/s backing up while holding brake at a standstill
   boostMultiplier: 1.55,
-  boostDrain: 0.45,              // meter per second while boosting
-  boostRecharge: 0.06,           // meter per second passive
-  landingBoostBonus: 0.25,       // meter added on a clean landing
+  // Turbo is earned, as in Radical Bikers: seconds of boost banked by ramp jumps, tricks and drifts,
+  // burned automatically right after landing.
+  turboMax: 5,                   // seconds
+  turboPerAir: 1.6,              // seconds per second of air time on a clean landing
+  turboLanding: 0.8,             // flat bonus for any clean ramp landing
+  turboTrick: 1.5,               // bonus for a trick finished before landing
+  wheelieJump: 1.4,              // launch speed multiplier when leaving a ramp in a wheelie
   gravity: 30,
   driftMinSpeed: 14,             // m/s needed to start a drift
   driftTurn: 1.9,                // steering multiplier while drifting
   driftDrag: 6,                  // m/s² lost while drifting (a full brake is 45)
   driftBoostAfter: 0.5,          // seconds of drift that earn boost
-  driftBoost: 0.2,
+  driftBoost: 0.8,               // seconds of turbo
 };
 
 export const RACE = {

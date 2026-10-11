@@ -108,6 +108,23 @@ export class Fx {
     }
   }
 
+  // White streak along the kicking foot's arc.
+  kickTrail(r) {
+    const k = r.kick, c = Math.sin(Math.PI * k.t);
+    if (c < 0.2) return;
+    const lx = Math.cos(r.heading) * k.side, lz = -Math.sin(r.heading) * k.side;
+    const reach = 0.5 + 1.3 * c;
+    for (let i = 0; i < 2; i++) {
+      this.fire.emit(r.pos.x + lx * reach, r.pos.y + 0.8 + i * 0.2, r.pos.z + lz * reach, 0, 0, 0, 0.18, 0.6, -2, 0xffffff, 0.6);
+    }
+  }
+
+  // A kick landing: a bright star burst plus sparks.
+  impact(pos) {
+    this.fire.emit(pos.x, pos.y + 1.2, pos.z, 0, 0.5, 0, 0.25, 2.8, -6, 0xfff2b0, 1);
+    this.sparks(pos, 22);
+  }
+
   // Sparks from a hit.
   sparks(pos, n = 16) {
     for (let k = 0; k < n; k++) {
