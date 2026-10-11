@@ -128,6 +128,8 @@ export const napoli = {
   id: 'napoli',
   name: 'Napoli',
   price: 0,
+  // Easy: the reference clock, rivals as they are, two cars a lane.
+  difficulty: { label: 'Easy', stars: 1, rivals: 1, traffic: 2 },
   tagline: 'Basoli, vicoli and Vesuvio',
 
   // Deliveries, in intersection coordinates (multiplied by CELL), about 1.5 minutes each.

@@ -71,7 +71,7 @@ export class Rival {
     this.tickKick(dt);
     if (this.finished) return;
     this.stun = Math.max(0, this.stun - dt);
-    const max = PLAYER.maxSpeed * this.def.speed * (this.stun > 0 ? 0.4 : 1);
+    const max = PLAYER.maxSpeed * this.def.speed * this.world.city.difficulty.rivals * (this.stun > 0 ? 0.4 : 1);
     const goal = active ? max : 0;
     this.speed += THREE.MathUtils.clamp(goal - this.speed, -40 * dt, PLAYER.accel * dt);
 

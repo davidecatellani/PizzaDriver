@@ -248,7 +248,8 @@ class Game {
     const c = this.menuCityDef, owned = this.ownedCities.includes(c.id);
     const el = $('city-name');
     el.classList.toggle('locked', !owned);
-    el.innerHTML = owned ? `${c.name}<small>${c.tagline}</small>` : `🔒 ${c.name}<small>Unlock for $${c.price} tips · ${c.tagline}</small>`;
+    const level = `${c.difficulty.label} ${'★'.repeat(c.difficulty.stars)}${'☆'.repeat(3 - c.difficulty.stars)}`;
+    el.innerHTML = owned ? `${c.name}<small>${level} · ${c.tagline}</small>` : `🔒 ${c.name}<small>${level} · unlock for $${c.price} tips</small>`;
     $('play-btn').textContent = owned ? 'RIDE!' : `UNLOCK $${c.price}`;
     $('play-btn').disabled = !owned && this.totalTips < c.price;
     ui.subtitle.textContent = owned ? this.subtitleText : `You have $${this.totalTips}`;
@@ -301,7 +302,7 @@ class Game {
     this.cityRoot = new THREE.Group();
     this.scene.add(this.cityRoot);
     this.world = new World(this.cityRoot, this.city);
-    this.traffic = new Traffic(this.cityRoot, this.city.cars);
+    this.traffic = new Traffic(this.cityRoot, this.city.cars, this.city.difficulty.traffic);
     this.people = new People(this.cityRoot, this.city.locals);
     for (const c of this.people.statics) this.world.posts.push({ x: c.x, z: c.z, r: 0.6 });
     this.traffic.onHonk = (c) => { if (c.pos.distanceTo(this.player.pos) < 25 && this.state === 'race') this.audio.sfx('horn'); };

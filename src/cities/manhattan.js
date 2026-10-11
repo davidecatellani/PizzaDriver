@@ -169,7 +169,9 @@ function flatiron(w, r) {
 export const manhattan = {
   id: 'manhattan',
   name: 'Manhattan',
-  price: 300,
+  price: 600,
+  // Hard: the tightest clock, the fastest rivals, packed streets full of reckless cabs.
+  difficulty: { label: 'Hard', stars: 3, refSpeed: 25.6, slack: 1, rivals: 1.05, traffic: 3 },
   tagline: 'Yellow cabs, skyscrapers and Central Park',
 
   // Same street grid as every city: start at the pizzeria corner (0, 0); `detour` is the stretch

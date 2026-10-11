@@ -281,7 +281,9 @@ function sacreCoeur(w, x, z) {
 export const paris = {
   id: 'paris',
   name: 'Paris',
-  price: 600,
+  price: 300,
+  // Medium: a tighter clock, quicker rivals, busier streets.
+  difficulty: { label: 'Medium', stars: 2, refSpeed: 26.2, slack: 1.5, rivals: 1.03, traffic: 3 },
   tagline: 'Cafés, boulevards and the Eiffel Tower',
 
   // The gravel path under the Eiffel Tower along row 3 is the secret shortcut (see `detour`).

@@ -548,7 +548,9 @@ export class World {
     }
     const isSkipped = (m) => skipped.some(([lo, hi]) => m > lo && m < hi);
     let rampKind = 0;
-    const secs = (m) => Math.round(m / RACE.refSpeed + RACE.slack);
+    // The city's difficulty sets how tight the clock is.
+    const { refSpeed = RACE.refSpeed, slack = RACE.slack } = this.city.difficulty;
+    const secs = (m) => Math.round(m / refSpeed + slack);
     let travelled = 0, lastMark = 0, longSegs = 0;
     const marks = [];
     for (let i = 0; i < pts.length - 1; i++) {
