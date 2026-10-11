@@ -206,6 +206,7 @@ class Game {
     const dir = new THREE.Vector2(p1[0] - p0[0], p1[1] - p0[1]).normalize();
     this.player.reset(-dir.x * 5 - dir.y * 4, -dir.y * 5 + dir.x * 4, Math.atan2(dir.x, dir.y));
     for (const r of this.rivals) r.reset(d.path);
+    this.clearStart();
     this.timeLeft = this.world.startTime;
     this.cpIndex = 0;
     this.secretsFound = new Set();
@@ -217,6 +218,13 @@ class Game {
     this.updateCamera(1);
   }
 
+  // No cars on the first street of the route, or near the start corner, when the race begins.
+  clearStart() {
+    const p = this.player;
+    this.traffic.clearAround(p.pos.x, p.pos.z, 30);
+    this.traffic.clearStreet(p.pos.x, p.pos.z, p.heading);
+  }
+
   startRace() {
     this.audio.unlock();
     this.show(ui.countdown);
@@ -226,6 +234,8 @@ class Game {
     $('brake-btn').classList.remove('hidden');
     $('kick-btn').classList.remove('hidden');
     this.state = 'countdown';
+    this.clearStart();
+    this.traffic.calm = 9;   // the countdown plus the first seconds of the race
     this.look.watch = true;
     this.countdown = 3;
     ui.count.textContent = '3';

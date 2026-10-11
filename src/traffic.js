@@ -65,8 +65,37 @@ export class Traffic {
     this.update(0, []);
   }
 
+  // Moves every car within `r` metres of (x, z) further along its lane, out of the way.
+  clearAround(x, z, r) {
+    for (const c of this.cars) {
+      for (let k = 0; k < 40 && Math.hypot(c.pos.x - x, c.pos.z - z) < r; k++) {
+        c.s = (c.s + 10) % SPAN;
+        this.place(c);
+      }
+    }
+  }
+
+  // Empties the street the race starts on: no car in the strip `ahead` metres in front of (x, z)
+  // along `heading` (and a little behind), so nothing drives at the riders as they set off.
+  clearStreet(x, z, heading, ahead = 180, behind = 30, half = 8) {
+    const fx = Math.sin(heading), fz = Math.cos(heading);
+    const inside = (c) => {
+      const dx = c.pos.x - x, dz = c.pos.z - z;
+      const along = dx * fx + dz * fz, side = Math.abs(dx * fz - dz * fx);
+      return along > -behind && along < ahead && side < half;
+    };
+    for (const c of this.cars) {
+      for (let k = 0; k < 60 && inside(c); k++) {
+        c.s = (c.s + 10) % SPAN;
+        this.place(c);
+      }
+    }
+  }
+
   // `riders`: things the cars should not run over ({pos}).
+  // While `calm` > 0 (the start of a race) even reckless drivers brake for riders.
   update(dt, riders) {
+    this.calm = Math.max(0, (this.calm || 0) - dt);
     for (const c of this.cars) {
       const { lane, kind } = c;
       c.fwd.set(lane.axis === 'x' ? lane.dir : 0, lane.axis === 'z' ? lane.dir : 0);
@@ -91,7 +120,7 @@ export class Traffic {
         for (const r of riders) {
           if (check(r.pos.x, r.pos.z, 0.8)) {
             honk = true;
-            if (!c.reckless || r.walker) { blocked = true; break; }
+            if (!c.reckless || r.walker || this.calm > 0) { blocked = true; break; }
           }
         }
       }
@@ -102,19 +131,25 @@ export class Traffic {
       c.speed += THREE.MathUtils.clamp(want - c.speed, -30 * dt, 6 * dt);
       c.s = (c.s + c.speed * dt) % SPAN;
 
-      const along = lane.dir > 0 ? c.s - 20 : SPAN - 20 - c.s;
-      const offset = LANE_OFFSET * lane.dir;
       c.shove.multiplyScalar(Math.exp(-3 * dt));
-      if (lane.axis === 'x') {
-        c.pos.set(along, 0, lane.line - offset);
-        c.mesh.rotation.y = lane.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
-      } else {
-        c.pos.set(lane.line + offset, 0, along);
-        c.mesh.rotation.y = lane.dir > 0 ? 0 : Math.PI;
-      }
-      c.mesh.position.set(c.pos.x + c.shove.x, 0, c.pos.z + c.shove.y);
-      c.mesh.rotation.z = c.shove.length() * 0.04;
+      this.place(c);
     }
+  }
+
+  // Puts the car's position and mesh where its distance along the lane says.
+  place(c) {
+    const { lane } = c;
+    const along = lane.dir > 0 ? c.s - 20 : SPAN - 20 - c.s;
+    const offset = LANE_OFFSET * lane.dir;
+    if (lane.axis === 'x') {
+      c.pos.set(along, 0, lane.line - offset);
+      c.mesh.rotation.y = lane.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+    } else {
+      c.pos.set(lane.line + offset, 0, along);
+      c.mesh.rotation.y = lane.dir > 0 ? 0 : Math.PI;
+    }
+    c.mesh.position.set(c.pos.x + c.shove.x, 0, c.pos.z + c.shove.y);
+    c.mesh.rotation.z = c.shove.length() * 0.04;
   }
 
   // Returns the car the point overlaps, if any.
