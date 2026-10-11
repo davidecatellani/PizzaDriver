@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { CELL, STREET, GRID, RACE } from './config.js';
+import { CELL, STREET, GRID, RACE, ALLEYS } from './config.js';
 import { box, mat, makeObject } from './assets.js';
 import * as TEX from './textures.js';
 
@@ -11,6 +11,7 @@ const PALETTE = [0xe8b75a, 0xd98c73, 0xc8643f, 0xefdcb8, 0xe6a86b, 0xcfc39b, 0xb
 // Palazzo covering blocks (2..3, 2..3); the tunnel runs through it along z = 3*CELL.
 const PALAZZO = { minX: 2 * CELL + HALF, maxX: 4 * CELL - HALF, minZ: 2 * CELL + HALF, maxZ: 4 * CELL - HALF };
 const TUNNEL_HALF = 3.6;
+const ALLEY_HALF = 2.7;     // half-width of a secret alley between the buildings
 export const TUNNEL = { minX: PALAZZO.minX, maxX: PALAZZO.maxX, minZ: 3 * CELL - TUNNEL_HALF, maxZ: 3 * CELL + TUNNEL_HALF };
 
 const PLINTH = 3.6;      // ground floor (shops) height
@@ -64,6 +65,24 @@ export class World {
     this.plinths = [];
     this.trims = [];                   // cornices, balconies, rooftop rooms: untextured, vertex coloured
     this.pavements = [];
+    // Secret alleys: which blocks they cut through, and the hidden areas that count as found.
+    this.alleyAt = new Map();
+    this.secrets = [{ ...TUNNEL, minX: TUNNEL.minX + 4, maxX: TUNNEL.maxX - 4, id: 'tunnel' }];
+    this.alleys = ALLEYS.map((a, n) => {
+      const line = (a.at + 0.5) * CELL;
+      for (let k = a.from; k < a.to; k++) {
+        const [bi, bj] = a.axis === 'x' ? [k, a.at] : [a.at, k];
+        this.alleyAt.set(`${bi},${bj}`, { axis: a.axis, line });
+        const lo = k * CELL + HALF + 2, hi = (k + 1) * CELL - HALF - 2;
+        this.secrets.push(a.axis === 'x'
+          ? { minX: lo, maxX: hi, minZ: line - ALLEY_HALF, maxZ: line + ALLEY_HALF, id: `alley${n}` }
+          : { minX: line - ALLEY_HALF, maxX: line + ALLEY_HALF, minZ: lo, maxZ: hi, id: `alley${n}` });
+      }
+      // End points on the street centre lines, for keeping checkpoints off the stretch an alley skips.
+      return a.axis === 'x'
+        ? { a: new THREE.Vector2(a.from * CELL, line), b: new THREE.Vector2(a.to * CELL, line) }
+        : { a: new THREE.Vector2(line, a.from * CELL), b: new THREE.Vector2(line, a.to * CELL) };
+    });
     this.buildGround();
     this.buildCity();
     this.buildPalazzo();
@@ -189,7 +208,21 @@ export class World {
         const minZ = bj * CELL + HALF, maxZ = (bj + 1) * CELL - HALF;
         if (bi >= 2 && bi <= 3 && bj >= 2 && bj <= 3) continue; // palazzo
         const outer = bi < 0 || bj < 0 || bi >= GRID || bj >= GRID;
-        this.sidewalk(minX, maxX, minZ, maxZ);
+        const alley = this.alleyAt.get(`${bi},${bj}`);
+        if (alley) {
+          // Pavement on both sides of the alley, none in it.
+          const L = alley.line;
+          if (alley.axis === 'x') {
+            this.sidewalk(minX, maxX, minZ, L - ALLEY_HALF);
+            this.sidewalk(minX, maxX, L + ALLEY_HALF, maxZ);
+          } else {
+            this.sidewalk(minX, L - ALLEY_HALF, minZ, maxZ);
+            this.sidewalk(L + ALLEY_HALF, maxX, minZ, maxZ);
+          }
+          this.alleyDressing(alley, minX, maxX, minZ, maxZ);
+        } else {
+          this.sidewalk(minX, maxX, minZ, maxZ);
+        }
         const inner = { minX: minX + 2, maxX: maxX - 2, minZ: minZ + 2, maxZ: maxZ - 2 };
 
         if (!outer && bi === 1 && bj === 4) { this.piazza(inner); continue; }
@@ -203,7 +236,12 @@ export class World {
             const h = outer ? 24 + rnd() * 10 : 11 + rnd() * 13;
             const col = PALETTE[Math.floor(rnd() * PALETTE.length)];
             const streets = outer ? [] : [a ? '+x' : '-x', b ? '+z' : '-z'];
-            this.building(inner.minX + w * (a + 0.5), inner.minZ + d * (b + 0.5), w - 0.6, d - 0.6, h, col, streets);
+            let x0 = inner.minX + w * a + 0.3, x1 = inner.minX + w * (a + 1) - 0.3;
+            let z0 = inner.minZ + d * b + 0.3, z1 = inner.minZ + d * (b + 1) - 0.3;
+            // Leave the alley open between the two rows of buildings.
+            if (alley?.axis === 'x') { if (b === 0) z1 = alley.line - ALLEY_HALF; else z0 = alley.line + ALLEY_HALF; }
+            if (alley?.axis === 'z') { if (a === 0) x1 = alley.line - ALLEY_HALF; else x0 = alley.line + ALLEY_HALF; }
+            this.building((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, h, col, streets);
           }
         }
       }
@@ -287,7 +325,7 @@ export class World {
     roof.position.set((P.minX + P.maxX) / 2, 6 + (h - 6) / 2, 3 * CELL);
     this.scene.add(roof);
     // Laundry hides both entrances: you can ride straight through it.
-    this.curtains = [];
+    this.curtains ??= [];
     for (const x of [T.minX - 0.3, T.maxX + 0.3]) {
       const sheets = [0xffffff, 0xf2a7c3, 0x9fd3e6, 0xf7e27a];
       for (let i = 0; i < 4; i++) {
@@ -298,6 +336,34 @@ export class World {
         this.curtains.push(s);
       }
     }
+  }
+
+  // An alley through one block: laundry hiding both mouths, an arch overhead, washing lines above.
+  alleyDressing(alley, minX, maxX, minZ, maxZ) {
+    const L = alley.line, alongX = alley.axis === 'x';
+    const sheets = [0xffffff, 0xf2a7c3, 0x9fd3e6, 0xf7e27a, 0xe85d4a];
+    const mouths = alongX ? [minX + 2.6, maxX - 2.6] : [minZ + 2.6, maxZ - 2.6];
+    this.curtains ??= [];
+    for (const m of mouths) {
+      for (let i = 0; i < 3; i++) {
+        const sheet = new THREE.Mesh(new THREE.PlaneGeometry(1.75, 4), mat(sheets[(i + Math.round(m)) % sheets.length], { side: THREE.DoubleSide }));
+        const t = L - ALLEY_HALF + 0.9 + i * 1.8;
+        if (alongX) { sheet.position.set(m, 3.3, t); sheet.rotation.y = Math.PI / 2; } else sheet.position.set(t, 3.3, m);
+        this.scene.add(sheet);
+        this.curtains.push(sheet);
+      }
+    }
+    // Arch joining the two rows of buildings in the middle of the block.
+    const c = alongX ? (minX + maxX) / 2 : (minZ + maxZ) / 2;
+    const [w, d] = alongX ? [5, ALLEY_HALF * 2 + 0.6] : [ALLEY_HALF * 2 + 0.6, 5];
+    const [x, z] = alongX ? [c, L] : [L, c];
+    this.facades[1].push(coloredBox(w, 5, d, x, 8.1, z, 0xe3c9a0, (g) => bayUVs(g, w, d, BAY, 1)));
+    this.trims.push(coloredBox(w + 0.4, 0.4, d + 0.4, x, 5.6, z, 0xfff1dc));
+  }
+
+  // The secret area (palazzo tunnel or an alley) containing (x, z), if any.
+  secretAt(x, z) {
+    return this.secrets.find((r) => x > r.minX && x < r.maxX && z > r.minZ && z < r.maxZ);
   }
 
   // Street furniture and life: lamp posts at the corners, zebra crossings, laundry lines across streets.
@@ -401,28 +467,110 @@ export class World {
     this.scene.add(clothes, new THREE.Mesh(mergeGeometries(lines), new THREE.MeshBasicMaterial({ color: 0x3a3a3a })));
   }
 
-  // Ramps: position, heading (0 = +z), length, width, height.
-  addRamp(x, z, heading, L = 9, w = 6, h = 2.4, color = 0x9c6b3c) {
-    const shape = new THREE.Shape();
-    shape.moveTo(0, 0);
-    shape.lineTo(L, 0);
-    shape.lineTo(L, h);
-    shape.closePath();
-    const geo = new THREE.ExtrudeGeometry(shape, { depth: w, bevelEnabled: false });
-    geo.translate(0, 0, -w / 2);
-    const m = new THREE.Mesh(geo, mat(color));
-    m.position.set(x, 0, z);
-    m.rotation.y = heading - Math.PI / 2;
-    m.castShadow = true;
-    m.receiveShadow = true;
-    this.scene.add(m);
-    this.ramps.push({ x, z, sin: Math.sin(heading), cos: Math.cos(heading), L, w, h, mesh: m });
+  // A straight jump at (x, z) facing `heading` (0 = +z): rises from 0 to h over L metres, w wide.
+  // The rideable surface is the same wedge for every kind; only the dressing differs.
+  addRamp(x, z, heading, kind = 'stairs') {
+    const dims = { stairs: [9, 5, 2.4], crates: [8, 2.8, 2.1], awning: [8, 4.4, 2.5] }[kind];
+    const [L, w, h] = dims;
+    const g = new THREE.Group();
+    const stone = 0xd8cdb8, wood = 0x9c6b3c;
+    if (kind === 'stairs') {
+      // Marble steps with low parapet walls either side.
+      const n = 10;
+      for (let k = 0; k < n; k++) {
+        const step = box(w, h * (k + 1) / n, L / n, k % 2 ? stone : 0xcfc3ac);
+        step.position.set(0, h * (k + 1) / n / 2, L * (k + 0.5) / n);
+        g.add(step);
+      }
+      for (const sx of [-1, 1]) {
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1, L), mat(0xbfb29a));
+        wall.position.set(sx * (w / 2 + 0.22), 0.5, L / 2);
+        // Sloped top following the steps.
+        const pos = wall.geometry.attributes.position;
+        for (let v = 0; v < pos.count; v++) {
+          if (pos.getY(v) > 0) pos.setY(v, h * (pos.getZ(v) / L + 0.5) + 0.3);
+        }
+        pos.needsUpdate = true;
+        wall.geometry.computeVertexNormals();
+        wall.castShadow = true;
+        g.add(wall);
+      }
+    } else if (kind === 'crates') {
+      // A plank propped on a stack of tomato crates.
+      const plank = box(w, 0.12, Math.hypot(L, h), wood);
+      plank.rotation.x = -Math.atan2(h, L);
+      plank.position.set(0, h / 2, L / 2);
+      g.add(plank);
+      for (let cx = -1; cx <= 1; cx += 2) {
+        for (let cy = 0; cy < 3; cy++) {
+          const crate = box(1.3, 0.68, 1.1, 0xb98a52);
+          crate.position.set(cx * 0.66, 0.34 + cy * 0.69 - 0.05, L + 0.5);
+          g.add(crate);
+          const toms = box(1.1, 0.12, 0.9, 0xd8392b);
+          toms.position.set(cx * 0.66, 0.66 + cy * 0.69 - 0.05, L + 0.5);
+          g.add(toms);
+        }
+      }
+    } else {
+      // A closed market stall whose striped awning slopes down to the road.
+      const c = document.createElement('canvas');
+      c.width = 64; c.height = 8;
+      const cg = c.getContext('2d');
+      for (let k = 0; k < 8; k++) { cg.fillStyle = k % 2 ? '#ffffff' : '#c8302c'; cg.fillRect(k * 8, 0, 8, 8); }
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      const canvas = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, Math.hypot(L, h)), new THREE.MeshStandardMaterial({ map: t, roughness: 0.9 }));
+      canvas.rotation.x = -Math.atan2(h, L);
+      canvas.position.set(0, h / 2, L / 2);
+      canvas.castShadow = true;
+      g.add(canvas);
+      const stall = box(w, h, 2.2, 0x6b4a2f);
+      stall.position.set(0, h / 2, L + 1.1);
+      g.add(stall);
+      for (const sx of [-1, 1]) {
+        const pole = box(0.12, h, 0.12, 0x333333);
+        pole.position.set(sx * (w / 2 - 0.1), h / 2, L);
+        g.add(pole);
+      }
+    }
+    g.position.set(x, 0, z);
+    g.rotation.y = heading;
+    g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    this.scene.add(g);
+    this.ramps.push({ x, z, sin: Math.sin(heading), cos: Math.cos(heading), L, w, h, mesh: g });
+  }
+
+  // A round fountain in the middle of the street: its sloping stone rim is a jump from any side.
+  addFountainJump(x, z) {
+    const R = 5.2, top = 1.2, h = 1.45;
+    const g = new THREE.Group();
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(top, R, h, 28, 1), mat(0xd9cfbd));
+    rim.position.y = h / 2;
+    g.add(rim);
+    const water = new THREE.Mesh(new THREE.CylinderGeometry(top * 0.92, top * 0.92, 0.05, 20),
+      new THREE.MeshStandardMaterial({ color: 0x4fa7d8, roughness: 0.1, metalness: 0.2 }));
+    water.position.y = h + 0.01;
+    g.add(water);
+    // A ring of low basins for looks.
+    const basin = new THREE.Mesh(new THREE.TorusGeometry(R * 0.72, 0.18, 6, 28), mat(0xc4b79f));
+    basin.rotation.x = Math.PI / 2;
+    basin.position.y = h * 0.32;
+    g.add(basin);
+    g.position.set(x, 0, z);
+    g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    this.scene.add(g);
+    this.ramps.push({ round: true, x, z, R, top, h, mesh: g });
   }
 
   groundHeight(x, z) {
     let y = 0;
     for (const r of this.ramps) {
       const dx = x - r.x, dz = z - r.z;
+      if (r.round) {
+        const d = Math.hypot(dx, dz);
+        if (d < r.R) y = Math.max(y, d <= r.top ? r.h : (r.h * (r.R - d)) / (r.R - r.top));
+        continue;
+      }
       const along = dx * r.sin + dz * r.cos;
       const side = dx * r.cos - dz * r.sin;
       if (along >= 0 && along <= r.L && Math.abs(side) <= r.w / 2) y = Math.max(y, (r.h * along) / r.L);
@@ -482,6 +630,24 @@ export class World {
 
     const pts = delivery.path.map(([x, z]) => new THREE.Vector2(x * CELL, z * CELL));
     const [d0, d1] = delivery.detour ?? [-1, -1];
+    // Stretches of the route that a secret alley skips: no checkpoints there, or the shortcut would miss one.
+    const along = (q) => {
+      let acc = 0;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1], len = a.distanceTo(b);
+        const t = ((q.x - a.x) * (b.x - a.x) + (q.y - a.y) * (b.y - a.y)) / (len * len);
+        if (t >= -1e-6 && t <= 1 + 1e-6 && a.clone().lerp(b, t).distanceTo(q) < 1) return acc + t * len;
+        acc += len;
+      }
+      return null;
+    };
+    const skipped = [];
+    for (const al of this.alleys) {
+      const sa = along(al.a), sb = along(al.b);
+      if (sa !== null && sb !== null) skipped.push([Math.min(sa, sb) - 30, Math.max(sa, sb) + 30]);
+    }
+    const isSkipped = (m) => skipped.some(([lo, hi]) => m > lo && m < hi);
+    let rampKind = 0;
     const secs = (m) => Math.round(m / RACE.refSpeed + RACE.slack);
     let travelled = 0, lastMark = 0, longSegs = 0;
     const marks = [];
@@ -493,14 +659,17 @@ export class World {
       const onDetour = i >= d0 && i < d1;
       // Checkpoints: at least 25 m from either corner of the segment.
       for (let s = 25; s <= len - 25; s += 5) {
-        if (onDetour || travelled + s - lastMark < RACE.checkpointSpacing) continue;
+        if (onDetour || isSkipped(travelled + s) || travelled + s - lastMark < RACE.checkpointSpacing) continue;
         marks.push({ at: travelled + s, pos: a.clone().addScaledVector(dir, s), heading });
         lastMark = travelled + s;
       }
-      // Ramps on every other long straight, a third of the way along, in the right-hand lane.
+      // Jumps on every other long straight, a third of the way along: pieces of the city
+      // (a flight of steps, a fountain, a plank on fruit crates, a stall's sloping awning).
       if (len >= 3 * CELL && !onDetour && longSegs++ % 2 === 0) {
         const p = a.clone().addScaledVector(dir, len * 0.35);
-        this.addRamp(p.x + dir.y * 2.5, p.y - dir.x * 2.5, heading, 9, 5);
+        const kind = ['stairs', 'fountain', 'crates', 'awning'][rampKind++ % 4];
+        if (kind === 'fountain') this.addFountainJump(p.x, p.y);
+        else this.addRamp(p.x + dir.y * 2.5, p.y - dir.x * 2.5, heading, kind);
       }
       travelled += len;
     }

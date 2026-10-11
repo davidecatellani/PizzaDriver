@@ -144,7 +144,7 @@ class Game {
     for (const r of this.rivals) r.reset(d.path);
     this.timeLeft = this.world.startTime;
     this.cpIndex = 0;
-    this.usedSecret = false;
+    this.secretsFound = new Set();
     this.raceTime = 0;
     this.lastTick = 99;
     this.world.checkpoints.forEach((c, i) => { c.mesh.visible = i === 0; });
@@ -305,8 +305,9 @@ class Game {
       }
     }
 
-    if (!this.usedSecret && this.world.inTunnel(p.pos.x, p.pos.z)) {
-      this.usedSecret = true;
+    const secret = this.world.secretAt(p.pos.x, p.pos.z);
+    if (secret && !this.secretsFound.has(secret.id)) {
+      this.secretsFound.add(secret.id);
       this.toast('SECRET SHORTCUT!', 1600);
       this.audio.sfx('secret');
     }
@@ -349,7 +350,7 @@ class Game {
     const base = [25, 15, 10, 5][place - 1];
     const timeBonus = Math.round(this.timeLeft);
     const heatBonus = Math.round(this.player.heat / 10);
-    const secretBonus = this.usedSecret ? 5 : 0;
+    const secretBonus = 5 * this.secretsFound.size;
     this.lastPlace = place;
     this.lastTips = base + timeBonus + heatBonus + secretBonus;
     this.lastBreakdown = { base, timeBonus, heatBonus, secretBonus };
@@ -366,7 +367,7 @@ class Game {
       Position: <b>${ord}</b> (+$${b.base})<br>
       Time left: <b>${b.timeBonus}s</b> (+$${b.timeBonus})<br>
       Pizza heat: <b>${Math.round(this.player.heat)}%</b> (+$${b.heatBonus})<br>
-      ${b.secretBonus ? `Secret shortcut: <b>found</b> (+$${b.secretBonus})<br>` : ''}
+      ${b.secretBonus ? `Secret shortcuts: <b>${b.secretBonus / 5}</b> (+$${b.secretBonus})<br>` : ''}
       Tips: <b>$${this.lastTips}</b>`;
   }
 

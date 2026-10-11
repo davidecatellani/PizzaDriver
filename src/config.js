@@ -72,6 +72,18 @@ export const DELIVERIES = [
   },
 ];
 
+// Secret alleys ("vicoli"): narrow passages straight through a row of blocks, hidden behind
+// hanging laundry. `axis` is the direction the alley runs; it lies mid-block on row/column `at`
+// and spans from street `from` to street `to`. Each one cuts a big corner off at least one delivery.
+export const ALLEYS = [
+  { axis: 'x', at: 2, from: 8, to: 10 },   // Lungomare
+  { axis: 'z', at: 7, from: 8, to: 10 },   // Lungomare
+  { axis: 'z', at: 1, from: 0, to: 2 },    // Piazza del Gesù
+  { axis: 'z', at: 4, from: 0, to: 3 },    // Mercato
+  { axis: 'z', at: 4, from: 6, to: 9 },    // Quartieri Spagnoli
+  { axis: 'x', at: 6, from: 0, to: 2 },    // Stadio
+];
+
 export const RIVALS = [
   { name: 'Gino', color: 0x2e9d4a, speed: 0.83, aggression: 0.6 },
   { name: 'Lola', color: 0x8a3fd1, speed: 0.89, aggression: 0.4 },
