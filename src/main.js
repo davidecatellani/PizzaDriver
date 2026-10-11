@@ -134,7 +134,7 @@ class Game {
     const dir = new THREE.Vector2(p1[0] - p0[0], p1[1] - p0[1]).normalize();
     this.player.reset(-dir.x * 5 - dir.y * 4, -dir.y * 5 + dir.x * 4, Math.atan2(dir.x, dir.y));
     for (const r of this.rivals) r.reset(d.path);
-    this.timeLeft = RACE.startTime;
+    this.timeLeft = this.world.startTime;
     this.cpIndex = 0;
     this.usedSecret = false;
     this.raceTime = 0;
@@ -150,6 +150,7 @@ class Game {
     this.show(ui.countdown);
     ui.hud.classList.remove('hidden');
     ui.boostBtn.classList.remove('hidden');
+    $('brake-btn').classList.remove('hidden');
     this.state = 'countdown';
     this.countdown = 3;
     ui.count.textContent = '3';
@@ -252,8 +253,8 @@ class Game {
     if (cp && Math.hypot(cp.pos.x - p.pos.x, cp.pos.z - p.pos.z) < 11) {
       cp.mesh.visible = false;
       this.cpIndex++;
-      this.timeLeft += RACE.checkpointBonus;
-      this.toast(`CHECKPOINT +${RACE.checkpointBonus}s`);
+      this.timeLeft += cp.time;
+      this.toast(`CHECKPOINT +${cp.time}s`);
       this.audio.sfx('checkpoint');
       const next = this.world.checkpoints[this.cpIndex];
       if (next) next.mesh.visible = true;
@@ -310,6 +311,7 @@ class Game {
     for (const e of this.player.events) {
       if (e.type === 'crash') this.audio.sfx('crash');
       if (e.type === 'jump') this.audio.sfx('jump');
+      if (e.type === 'drift') { this.audio.sfx('land'); this.toast('DRIFT! +BOOST'); }
       if (e.type === 'land') {
         if (e.clean) {
           this.audio.sfx('land');

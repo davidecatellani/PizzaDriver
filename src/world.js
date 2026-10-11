@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { CELL, STREET, GRID } from './config.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { CELL, STREET, GRID, RACE } from './config.js';
 import { box, mat, makeObject } from './assets.js';
 
 const HALF = STREET / 2;
@@ -44,34 +45,55 @@ function facadeUVs(geo, w, h, d) {
   }
 }
 
+function coloredBox(w, h, d, x, y, z, color, uvFix) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  uvFix?.(geo);
+  geo.translate(x, y, z);
+  const c = new THREE.Color(color);
+  const cols = new Float32Array(geo.attributes.position.count * 3);
+  for (let i = 0; i < cols.length; i += 3) { cols[i] = c.r; cols[i + 1] = c.g; cols[i + 2] = c.b; }
+  geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  return geo;
+}
+
 export class World {
   constructor(scene) {
     this.scene = scene;
     this.colliders = [];
     this.ramps = [];
     this.windowTex = windowTexture();
+    this.facades = [];
+    this.pavements = [];
     this.buildGround();
     this.buildCity();
     this.buildPalazzo();
-    this.buildRamps();
+    this.mergeCity();
     this.buildLandmarks();
     this.checkpoints = [];
+    this.routeRamps = [];
   }
 
   addCollider(minX, maxX, minZ, maxZ) {
     this.colliders.push({ minX, maxX, minZ, maxZ });
   }
 
+  // Buildings and pavements are collected and merged into two meshes, so the whole city
+  // costs two draw calls instead of one per box.
   building(x, z, w, d, h, color) {
-    const geo = new THREE.BoxGeometry(w, h, d);
-    facadeUVs(geo, w, h, d);
-    const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color, map: this.windowTex }));
-    m.position.set(x, h / 2, z);
-    m.castShadow = true;
-    m.receiveShadow = true;
-    this.scene.add(m);
+    this.facades.push(coloredBox(w, h, d, x, h / 2, z, color, (geo) => facadeUVs(geo, w, h, d)));
     this.addCollider(x - w / 2, x + w / 2, z - d / 2, z + d / 2);
-    return m;
+  }
+
+  mergeCity() {
+    const city = new THREE.Mesh(
+      mergeGeometries(this.facades),
+      new THREE.MeshLambertMaterial({ map: this.windowTex, vertexColors: true }),
+    );
+    city.castShadow = true;
+    city.receiveShadow = true;
+    const pavements = new THREE.Mesh(mergeGeometries(this.pavements), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    pavements.receiveShadow = true;
+    this.scene.add(city, pavements);
   }
 
   buildGround() {
@@ -102,10 +124,7 @@ export class World {
   }
 
   sidewalk(minX, maxX, minZ, maxZ) {
-    const s = box(maxX - minX, 0.3, maxZ - minZ, 0xcfc6b8);
-    s.position.set((minX + maxX) / 2, 0.15, (minZ + maxZ) / 2);
-    s.castShadow = false;
-    this.scene.add(s);
+    this.pavements.push(coloredBox(maxX - minX, 0.3, maxZ - minZ, (minX + maxX) / 2, 0.15, (minZ + maxZ) / 2, 0xcfc6b8));
   }
 
   buildCity() {
@@ -243,14 +262,7 @@ export class World {
     m.castShadow = true;
     m.receiveShadow = true;
     this.scene.add(m);
-    this.ramps.push({ x, z, sin: Math.sin(heading), cos: Math.cos(heading), L, w, h });
-  }
-
-  buildRamps() {
-    this.addRamp(0, 1.3 * CELL, 0);                       // first street: teaches the jump
-    this.addRamp(0.9 * CELL, 3 * CELL + 3.5, Math.PI / 2, 9, 5);
-    this.addRamp(4 * CELL + 3.5, 4.3 * CELL, 0, 9, 5);
-    this.addRamp(4.8 * CELL, 5 * CELL, Math.PI / 2, 10, 7, 3);
+    this.ramps.push({ x, z, sin: Math.sin(heading), cos: Math.cos(heading), L, w, h, mesh: m });
   }
 
   groundHeight(x, z) {
@@ -305,20 +317,43 @@ export class World {
     this.customerBeam = beam;
   }
 
-  // Builds the checkpoint rings and customer marker for one delivery.
+  // Lays out one delivery: checkpoints every ~RACE.checkpointSpacing metres along the route
+  // (off corners and off the palazzo detour), ramps on the long straights, and the customer at the end.
+  // Each checkpoint carries `time`: the seconds the clock gains for the stretch after it.
   setRoute(delivery) {
     for (const c of this.checkpoints) this.scene.remove(c.mesh);
+    for (const r of this.ramps) this.scene.remove(r.mesh);
     this.checkpoints = [];
-    for (const [x, z] of delivery.checkpoints) {
-      // Face the ring along the street segment it sits on.
-      let heading = 0;
-      const path = delivery.path;
-      for (let i = 0; i < path.length - 1; i++) {
-        const [ax, az] = path[i], [bx, bz] = path[i + 1];
-        const onX = ax === bx && x === ax && z >= Math.min(az, bz) && z <= Math.max(az, bz);
-        const onZ = az === bz && z === az && x >= Math.min(ax, bx) && x <= Math.max(ax, bx);
-        if (onX || onZ) { heading = Math.atan2(bx - ax, bz - az); break; }
+    this.ramps = [];
+
+    const pts = delivery.path.map(([x, z]) => new THREE.Vector2(x * CELL, z * CELL));
+    const [d0, d1] = delivery.detour ?? [-1, -1];
+    const secs = (m) => Math.round(m / RACE.refSpeed + RACE.slack);
+    let travelled = 0, lastMark = 0, longSegs = 0;
+    const marks = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const len = a.distanceTo(b);
+      const dir = b.clone().sub(a).normalize();
+      const heading = Math.atan2(dir.x, dir.y);
+      const onDetour = i >= d0 && i < d1;
+      // Checkpoints: at least 25 m from either corner of the segment.
+      for (let s = 25; s <= len - 25; s += 5) {
+        if (onDetour || travelled + s - lastMark < RACE.checkpointSpacing) continue;
+        marks.push({ at: travelled + s, pos: a.clone().addScaledVector(dir, s), heading });
+        lastMark = travelled + s;
       }
+      // Ramps on every other long straight, a third of the way along, in the right-hand lane.
+      if (len >= 3 * CELL && !onDetour && longSegs++ % 2 === 0) {
+        const p = a.clone().addScaledVector(dir, len * 0.35);
+        this.addRamp(p.x + dir.y * 2.5, p.y - dir.x * 2.5, heading, 9, 5);
+      }
+      travelled += len;
+    }
+
+    for (let k = 0; k < marks.length; k++) {
+      const m = marks[k];
+      const next = k + 1 < marks.length ? marks[k + 1].at : travelled;
       const g = new THREE.Group();
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(6.5, 0.45, 8, 32),
@@ -326,15 +361,18 @@ export class World {
       );
       ring.position.y = 5;
       g.add(ring);
-      g.position.set(x * CELL, 0, z * CELL);
-      g.rotation.y = heading;
+      g.position.set(m.pos.x, 0, m.pos.y);
+      g.rotation.y = m.heading;
       g.visible = false;
       this.scene.add(g);
-      this.checkpoints.push({ pos: new THREE.Vector3(x * CELL, 0, z * CELL), mesh: g, ring });
+      this.checkpoints.push({ pos: new THREE.Vector3(m.pos.x, 0, m.pos.y), mesh: g, ring, time: secs(next - m.at) });
     }
-    const [cx, cz] = delivery.customer;
-    this.customerPos.set(cx * CELL, 0, cz * CELL);
-    this.customerBeam.position.x = cx * CELL;
-    this.customerBeam.position.z = cz * CELL;
+    this.startTime = secs(marks.length ? marks[0].at : travelled);
+    this.routeLength = travelled;
+
+    const end = pts[pts.length - 1];
+    this.customerPos.set(end.x, 0, end.y);
+    this.customerBeam.position.x = end.x;
+    this.customerBeam.position.z = end.y;
   }
 }

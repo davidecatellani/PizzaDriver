@@ -55,7 +55,7 @@ button:active { transform: translateY(3px); }
   position: fixed; right: 20px; bottom: max(24px, env(safe-area-inset-bottom)); width: 96px; height: 96px;
   border-radius: 50%; background: #39ff88cc; color: #0b3; border-color: #fff; font-size: 16px; padding: 0;
 }
-.mute { position: fixed; left: 16px; bottom: 16px; width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 20px; }
+.mute { position: fixed; left: 16px; top: 110px; width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 20px; }
 .mute.off { opacity: .4; }
 
 .touch-only { display: none; }
@@ -76,4 +76,9 @@ button:active { transform: translateY(3px); }
 @media (max-width: 600px) {
   .minimap { width: 100px; height: 100px; }
   .turn { font-size: 30px; }
+}
+
+#brake-btn {
+  position: fixed; right: 132px; bottom: max(24px, env(safe-area-inset-bottom)); width: 80px; height: 80px;
+  border-radius: 50%; background: #ff9f1ccc; color: #5a2a00; border-color: #fff; font-size: 14px; padding: 0;
 }

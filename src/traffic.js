@@ -4,11 +4,14 @@ import { box, mat, makeObject } from './assets.js';
 
 // Each lane runs the full length of one street, on the right-hand side, and wraps around.
 const LANES = [
-  { axis: 'x', line: 1 * CELL, dir: 1, cars: 3 },
-  { axis: 'x', line: 2 * CELL, dir: -1, cars: 2 },
-  { axis: 'z', line: 1 * CELL, dir: 1, cars: 2 },
-  { axis: 'z', line: 5 * CELL, dir: -1, cars: 3 },
-];
+  { axis: 'x', line: 1 * CELL, dir: 1, cars: 4 },
+  { axis: 'x', line: 2 * CELL, dir: -1, cars: 3 },
+  { axis: 'x', line: 6 * CELL, dir: 1, cars: 4 },
+  { axis: 'x', line: 9 * CELL, dir: -1, cars: 3 },
+  { axis: 'z', line: 1 * CELL, dir: 1, cars: 3 },
+  { axis: 'z', line: 5 * CELL, dir: -1, cars: 4 },
+  { axis: 'z', line: 8 * CELL, dir: 1, cars: 3 },
+]
 const KINDS = [
   { id: 'fiat_500', len: 4, w: 2, h: 1.6, color: 0xf3ead2, speed: 13 },
   { id: 'ape', len: 3.4, w: 1.6, h: 2, color: 0x8ec5e8, speed: 10 },

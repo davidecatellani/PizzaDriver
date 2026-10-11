@@ -5,6 +5,7 @@ export class Input {
     this.keys = new Set();
     this.touchSteer = 0;
     this.touchBoost = false;
+    this.touchBrake = false;
     addEventListener('keydown', (e) => {
       this.keys.add(e.code);
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
@@ -30,12 +31,15 @@ export class Input {
       addEventListener(ev, canvasTouch, { passive: true });
     }
 
-    const boostBtn = document.getElementById('boost-btn');
-    if (boostBtn) {
-      boostBtn.addEventListener('touchstart', (e) => { e.preventDefault(); this.touchBoost = true; });
-      boostBtn.addEventListener('touchend', () => { this.touchBoost = false; });
-      boostBtn.addEventListener('touchcancel', () => { this.touchBoost = false; });
-    }
+    const hold = (id, key) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.addEventListener('touchstart', (e) => { e.preventDefault(); this[key] = true; });
+      btn.addEventListener('touchend', () => { this[key] = false; });
+      btn.addEventListener('touchcancel', () => { this[key] = false; });
+    };
+    hold('boost-btn', 'touchBoost');
+    hold('brake-btn', 'touchBrake');
   }
 
   get steer() {
@@ -47,7 +51,7 @@ export class Input {
   }
 
   get brake() {
-    return this.keys.has('ArrowDown') || this.keys.has('KeyS');
+    return this.keys.has('ArrowDown') || this.keys.has('KeyS') || this.touchBrake;
   }
 
   get boost() {

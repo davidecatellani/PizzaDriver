@@ -26,6 +26,8 @@ export class Player {
     this.boosting = false;
     this.heat = 100;           // pizza temperature: drops on crashes, affects the tip
     this.lean = 0;
+    this.drift = 0;            // seconds into the current drift
+    this.driftYaw = 0;         // visual slide angle
     this.sync();
   }
 
@@ -38,8 +40,23 @@ export class Player {
     const wantBoost = active && input.boost && this.boost > 0.02;
     this.boosting = wantBoost;
 
+    // Drift: braking while steering at speed slides the scooter round a corner instead of stopping it.
+    // A drift held long enough refills some boost when it ends.
+    const drifting = active && input.brake && Math.abs(steer) > 0.3 && this.speed > PLAYER.driftMinSpeed && !this.airborne;
+    if (drifting) {
+      this.drift += dt;
+    } else if (this.drift > 0) {
+      if (this.drift > PLAYER.driftBoostAfter) {
+        this.boost = Math.min(1, this.boost + PLAYER.driftBoost);
+        this.emit('drift', { time: this.drift });
+      }
+      this.drift = 0;
+    }
+    this.driftYaw = THREE.MathUtils.lerp(this.driftYaw, drifting ? steer * 0.5 : 0, 1 - Math.exp(-10 * dt));
+
     const max = PLAYER.maxSpeed * (wantBoost ? PLAYER.boostMultiplier : 1);
     if (!active) this.speed = Math.max(0, this.speed - PLAYER.brake * dt);
+    else if (drifting) this.speed = Math.max(0, this.speed - PLAYER.driftDrag * dt);
     else if (input.brake) this.speed = Math.max(0, this.speed - PLAYER.brake * dt);
     else if (this.speed < max) this.speed = Math.min(max, this.speed + PLAYER.accel * (wantBoost ? 2 : 1) * dt);
     else this.speed = Math.max(max, this.speed - PLAYER.accel * 0.5 * dt);
@@ -50,7 +67,7 @@ export class Player {
     // Steering gets slightly tighter at low speed; much weaker in the air.
     const grip = this.airborne ? 0.25 : 1;
     const speedFactor = THREE.MathUtils.clamp(this.speed / 8, 0, 1) * (1.1 - 0.2 * (this.speed / (PLAYER.maxSpeed * 1.5)));
-    this.heading += steer * PLAYER.turnRate * speedFactor * grip * dt;
+    this.heading += steer * PLAYER.turnRate * speedFactor * grip * (drifting ? PLAYER.driftTurn : 1) * dt;
     this.lean = THREE.MathUtils.lerp(this.lean, steer * 0.35 * Math.min(1, this.speed / 15), 1 - Math.exp(-8 * dt));
 
     const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
@@ -134,7 +151,7 @@ export class Player {
 
   sync() {
     this.mesh.position.copy(this.pos);
-    this.mesh.rotation.set(0, this.heading, 0);
+    this.mesh.rotation.set(0, this.heading + this.driftYaw, 0);
     this.mesh.rotateZ(-this.lean);
     if (this.airborne) this.mesh.rotateX(-THREE.MathUtils.clamp(this.vy * 0.03, -0.4, 0.4));
   }
