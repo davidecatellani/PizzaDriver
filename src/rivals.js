@@ -122,6 +122,7 @@ export class Rival {
   collide() {
     const r = 0.8, p = this.pos;
     for (const c of this.world.colliders) {
+      if (c.top !== undefined && p.y > c.top) continue;
       if (p.x + r <= c.minX || p.x - r >= c.maxX || p.z + r <= c.minZ || p.z - r >= c.maxZ) continue;
       const pushes = [[c.minX - r - p.x, 0], [c.maxX + r - p.x, 0], [0, c.minZ - r - p.z], [0, c.maxZ + r - p.z]];
       let best = pushes[0];

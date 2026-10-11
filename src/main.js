@@ -231,6 +231,7 @@ class Game {
     for (const r of this.rivals) r.update(dt, racing, this.player);
 
     if (racing) this.raceLogic(dt);
+    this.roadworks(dt);
     this.handleEvents();
     this.fx.update(dt, this.player);
     this.updateHUD();
@@ -245,6 +246,26 @@ class Game {
     ui.turn.classList.toggle('show', !!turn);
     if (turn) ui.turn.textContent = `${turn.side === 'left' ? '⬅' : '➡'} ${Math.max(0, Math.round(turn.dist / 5) * 5)}m`;
     this.minimap.draw(this);
+  }
+
+  // Barriers, cones and cobbles at the road works fly off whatever rides or drives into them.
+  roadworks(dt) {
+    const movers = [this.player, ...this.rivals].map((r) => ({
+      who: r, x: r.pos.x, y: r.pos.y, z: r.pos.z, fx: Math.sin(r.heading), fz: Math.cos(r.heading), speed: Math.abs(r.speed), r: 0.6,
+    }));
+    for (const c of this.traffic.cars) {
+      const l = c.lane;
+      movers.push({ x: c.pos.x, y: 0, z: c.pos.z, fx: l.axis === 'x' ? l.dir : 0, fz: l.axis === 'z' ? l.dir : 0, speed: c.speed, r: 1.1 });
+    }
+    for (const m of this.world.updateDebris(dt, movers)) {
+      if (!m.who) continue;
+      m.who.speed *= 0.9;
+      if (m.who === this.player) {
+        this.audio.sfx('bump');
+        this.fx.dust(this.player.pos, 8);
+        this.shake = Math.max(this.shake || 0, 0.15);
+      }
+    }
   }
 
   raceLogic(dt) {

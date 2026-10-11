@@ -60,6 +60,8 @@ export class World {
     this.colliders = [];
     this.posts = [];            // thin round obstacles (lamp posts): riders slide round them
     this.ramps = [];
+    this.roadworks = [];        // static road-works dressing, rebuilt with each route
+    this.debris = [];           // loose pieces that fly off when hit
     this.rnd = (() => { let seed = 99; return () => ((seed = (seed * 16807) % 2147483647) / 2147483647); })();
     this.facades = [[], [], [], []];   // one list per facade texture variant
     this.plinths = [];
@@ -361,6 +363,15 @@ export class World {
     this.trims.push(coloredBox(w + 0.4, 0.4, d + 0.4, x, 5.6, z, 0xfff1dc));
   }
 
+  // True when (x, z) is inside an ordinary block of buildings (not a landmark, the palazzo or an alley).
+  plainBlock(x, z) {
+    const bi = Math.floor(x / CELL), bj = Math.floor(z / CELL);
+    if (bi < 0 || bj < 0 || bi >= GRID || bj >= GRID) return false;
+    if (bi >= 2 && bi <= 3 && bj >= 2 && bj <= 3) return false;
+    if ((bi === 1 && bj === 4) || (bi === 0 && bj === 1) || (bi === 0 && bj === 0)) return false;
+    return !this.alleyAt.has(`${bi},${bj}`);
+  }
+
   // The secret area (palazzo tunnel or an alley) containing (x, z), if any.
   secretAt(x, z) {
     return this.secrets.find((r) => x > r.minX && x < r.maxX && z > r.minZ && z < r.maxZ);
@@ -470,7 +481,7 @@ export class World {
   // A straight jump at (x, z) facing `heading` (0 = +z): rises from 0 to h over L metres, w wide.
   // The rideable surface is the same wedge for every kind; only the dressing differs.
   addRamp(x, z, heading, kind = 'stairs') {
-    const dims = { stairs: [9, 5, 2.4], crates: [8, 2.8, 2.1], awning: [8, 4.4, 2.5] }[kind];
+    const dims = { stairs: [9, 5, 2.4], crates: [8, 2.8, 2.1], truck: [9, 2.5, 3.2] }[kind];
     const [L, w, h] = dims;
     const g = new THREE.Group();
     const stone = 0xd8cdb8, wood = 0x9c6b3c;
@@ -482,7 +493,20 @@ export class World {
         step.position.set(0, h * (k + 1) / n / 2, L * (k + 0.5) / n);
         g.add(step);
       }
-      for (const sx of [-1, 1]) {
+      // The palazzo's entrance: a stone landing across the pavement at the top of the steps,
+      // and a doorway in the facade behind it. Local +x is towards the kerb and the building.
+      const toWall = HALF + 2.3 - (HALF - 2.3) - w / 2;   // from the steps' edge to the facade
+      const landing = box(toWall, h, 3.2, 0xcfc3ac);
+      landing.position.set(w / 2 + toWall / 2, h / 2, L - 1.6);
+      landing.userData.solid = h;   // walkers and riders on the pavement go round it
+      g.add(landing);
+      const frame = box(0.2, 3.9, 3.1, 0xe9e2d4);
+      frame.position.set(w / 2 + toWall + 0.05, h + 1.95, L - 1.6);
+      g.add(frame);
+      const door = box(0.12, 3.2, 2.2, 0x4a3324);
+      door.position.set(w / 2 + toWall - 0.08, h + 1.6, L - 1.6);
+      g.add(door);
+      for (const sx of [-1]) {
         const wall = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1, L), mat(0xbfb29a));
         wall.position.set(sx * (w / 2 + 0.22), 0.5, L / 2);
         // Sloped top following the steps.
@@ -511,33 +535,171 @@ export class World {
           g.add(toms);
         }
       }
-    } else {
-      // A closed market stall whose striped awning slopes down to the road.
-      const c = document.createElement('canvas');
-      c.width = 64; c.height = 8;
-      const cg = c.getContext('2d');
-      for (let k = 0; k < 8; k++) { cg.fillStyle = k % 2 ? '#ffffff' : '#c8302c'; cg.fillRect(k * 8, 0, 8, 8); }
-      const t = new THREE.CanvasTexture(c);
-      t.colorSpace = THREE.SRGBColorSpace;
-      const canvas = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, Math.hypot(L, h)), new THREE.MeshStandardMaterial({ map: t, roughness: 0.9 }));
-      canvas.rotation.x = -Math.atan2(h, L);
-      canvas.position.set(0, h / 2, L / 2);
-      canvas.castShadow = true;
-      g.add(canvas);
-      const stall = box(w, h, 2.2, 0x6b4a2f);
-      stall.position.set(0, h / 2, L + 1.1);
-      g.add(stall);
+    } else if (kind === 'truck') {
+      // A parked tipper truck with its body tipped right down to the road: ride up the bed
+      // and fly over the cab. Local +z is the truck's front.
+      const yellow = 0xe8b21c, steel = 0x3b3f44;
+      const slope = -Math.atan2(h, L), len = Math.hypot(L, h);
+      const bed = new THREE.Group();
+      bed.rotation.x = slope;
+      bed.position.set(0, h / 2, L / 2);
+      const floor = box(w, 0.14, len, 0x8c7a5a);
+      bed.add(floor);
       for (const sx of [-1, 1]) {
-        const pole = box(0.12, h, 0.12, 0x333333);
-        pole.position.set(sx * (w / 2 - 0.1), h / 2, L);
-        g.add(pole);
+        const side = box(0.12, 0.7, len, yellow);
+        side.position.set(sx * (w / 2 - 0.06), 0.35, 0);
+        bed.add(side);
       }
+      const head = box(w, 1.1, 0.14, yellow);   // the front board, up behind the cab
+      head.position.set(0, 0.55, len / 2 - 0.07);
+      bed.add(head);
+      // Ribs under the sides.
+      for (let k = -2; k <= 2; k++) {
+        const rib = box(w + 0.1, 0.12, 0.12, 0xb98a12);
+        rib.position.set(0, -0.12, k * len / 5);
+        bed.add(rib);
+      }
+      g.add(bed);
+      // Chassis rails from the hinge forwards, wheels, the ram that tipped the body, and the cab.
+      const chassis = box(1.3, 0.35, L - 0.6, steel);
+      chassis.position.set(0, 1.0, (3.6 + L + 3) / 2);
+      g.add(chassis);
+      const ram = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, h - 1.2, 10), mat(0xb0b4b8, { metalness: 0.7, roughness: 0.3 }));
+      ram.position.set(0, 1.2 + (h - 1.2) / 2 - 0.15, L - 1.1);
+      ram.rotation.x = 0.25;
+      g.add(ram);
+      const tyre = new THREE.CylinderGeometry(0.55, 0.55, 0.45, 16);
+      tyre.rotateZ(Math.PI / 2);
+      for (const wz of [3.8, 5.0, L + 1.8]) {
+        for (const sx of [-1, 1]) {
+          const wheel = new THREE.Mesh(tyre, mat(0x1c1c1c, { roughness: 0.9 }));
+          wheel.position.set(sx * (w / 2 - 0.25), 0.55, wz);
+          g.add(wheel);
+        }
+      }
+      const cab = box(w, 2.0, 2.4, 0xe0e0dc);
+      cab.position.set(0, 2.1, L + 1.7);
+      cab.userData.solid = 2.5;   // below the lip of the bed, so riders leaving it clear the cab
+      const glass = box(w - 0.3, 0.8, 0.05, 0x23303a);
+      glass.position.set(0, 2.55, L + 2.92);
+      glass.material.metalness = 0.6; glass.material.roughness = 0.15;
+      const bumper = box(w + 0.1, 0.35, 0.25, steel);
+      bumper.position.set(0, 0.75, L + 2.95);
+      const grille = box(w - 0.6, 0.6, 0.05, 0x55595e);
+      grille.position.set(0, 1.4, L + 2.92);
+      const stripe = box(w + 0.02, 0.25, 2.42, yellow);
+      stripe.position.set(0, 1.55, L + 1.7);
+      g.add(cab, glass, bumper, grille, stripe);
+      for (const sx of [-1, 1]) {
+        const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 0.05),
+          new THREE.MeshStandardMaterial({ color: 0xfff2c0, emissive: 0xfff2c0, emissiveIntensity: 1.5 }));
+        lamp.position.set(sx * (w / 2 - 0.3), 1.05, L + 2.96);
+        g.add(lamp);
+      }
+      // The chassis is solid only below the tipped body.
+      const from = L * 0.6;   // where the bed is well above the top of the chassis
+      const under = box(w, 1.25, L + 0.3 - from, steel);
+      under.visible = false;
+      under.position.set(0, 0.62, (from + L + 0.3) / 2);
+      under.userData.solid = 1.3;
+      g.add(under);
     }
     g.position.set(x, 0, z);
     g.rotation.y = heading;
     g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     this.scene.add(g);
-    this.ramps.push({ x, z, sin: Math.sin(heading), cos: Math.cos(heading), L, w, h, mesh: g });
+    // Solid parts become colliders; riders higher than `top` pass over them.
+    g.updateMatrixWorld(true);
+    for (const o of g.children) {
+      if (o.userData.solid === undefined) continue;
+      const b = new THREE.Box3().setFromObject(o);
+      this.colliders.push({ minX: b.min.x, maxX: b.max.x, minZ: b.min.z, maxZ: b.max.z, top: o.userData.solid, ramp: true });
+    }
+    this.ramps.push({ kind, x, z, sin: Math.sin(heading), cos: Math.cos(heading), L, w, h, mesh: g });
+    if (kind === 'crates') this.addRoadworks(x, z, heading, L);
+  }
+
+  // Road works just past the builders' plank: a dug-up patch fenced off with barriers and cones.
+  // The pieces are loose: anything that rides into them sends them flying (see updateDebris).
+  addRoadworks(x, z, heading, L) {
+    const s = Math.sin(heading), c = Math.cos(heading);
+    const at = (lx, lz) => [x + lx * c + lz * s, z - lx * s + lz * c];
+    // Static: the hole in the paving and a heap of earth by the kerb.
+    const g = new THREE.Group();
+    const hole = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 7.5), mat(0x3b2e22, { roughness: 1 }));
+    hole.rotation.x = -Math.PI / 2;
+    hole.position.set(-0.6, 0.03, L + 6.4);
+    hole.receiveShadow = true;
+    const heap = new THREE.Mesh(new THREE.ConeGeometry(1.1, 0.6, 9), mat(0x6b5236, { roughness: 1, flatShading: true }));
+    heap.position.set(0.7, 0.3, L + 4);
+    heap.castShadow = heap.receiveShadow = true;
+    g.add(hole, heap);
+    g.position.set(x, 0, z);
+    g.rotation.y = heading;
+    this.scene.add(g);
+    this.roadworks.push(g);
+
+    const put = (piece, lx, lz, rot) => {
+      const [wx, wz] = at(lx, lz);
+      piece.mesh.position.set(wx, piece.half, wz);
+      piece.mesh.rotation.set(0, heading + rot, 0);
+      piece.mesh.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      this.scene.add(piece.mesh);
+      this.debris.push({ ...piece, vel: new THREE.Vector3(), spin: new THREE.Vector3(), flying: false });
+    };
+    // Barriers along the road side of the dig and across its far end.
+    for (let k = 0; k < 4; k++) put(barrier(k % 2 === 0), -2.9, L + 2.6 + k * 2.2, Math.PI / 2);
+    for (const lx of [-1.8, 0.4]) put(barrier(lx < 0), lx, L + 11.2, 0);
+    // Cones leading up to the plank and tapering back after the works.
+    for (const [lx, lz] of [[-2.1, -5], [-2.1, -1.5], [-2.1, 2.5], [-2.1, 6], [-3, L + 12.5], [-1.9, L + 13.8], [-0.7, L + 14.8]]) put(cone(), lx, lz, 0);
+    // A pallet of basoli waiting to be relaid, and the warning sign on the pavement.
+    for (let k = 0; k < 6; k++) put(cobble(), 0.3 + (k % 3) * 0.45, L + 8.6 + (k / 3 | 0) * 0.45, Math.random());
+    put(sign(), 2.7, -6, Math.PI);
+  }
+
+  // Loose road-works pieces: knocked flying by riders and cars, then left lying where they land.
+  // `movers`: [{x, y, z, fx, fz, speed, r}] (fx, fz = unit heading). Returns the movers that hit something.
+  updateDebris(dt, movers) {
+    const hits = new Set();
+    for (const d of this.debris) {
+      const m = d.mesh.position;
+      for (const v of movers) {
+        if (d.flying || v.speed < 1.5 || v.y > m.y + d.half + 0.4) continue;
+        const dx = m.x - v.x, dz = m.z - v.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist > d.r + v.r) continue;
+        // Thrown forwards with the mover and away from its centre line, tumbling.
+        const k = (v.speed * 0.8 + 3) / d.mass;
+        const nx = dist > 0.01 ? dx / dist : 0, nz = dist > 0.01 ? dz / dist : 0;
+        d.vel.set((v.fx * 1 + nx * 0.6) * k + (Math.random() - 0.5) * 2, 3 + Math.random() * 3 + v.speed * 0.12, (v.fz * 1 + nz * 0.6) * k + (Math.random() - 0.5) * 2);
+        d.spin.set((Math.random() - 0.5) * 14, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 14);
+        d.flying = true;
+        hits.add(v);
+      }
+      if (!d.flying) continue;
+      d.vel.y -= 22 * dt;
+      m.addScaledVector(d.vel, dt);
+      const r = d.mesh.rotation;
+      r.x += d.spin.x * dt; r.y += d.spin.y * dt; r.z += d.spin.z * dt;
+      const floor = d.lie;
+      if (m.y < floor && d.vel.y < 0) {
+        m.y = floor;
+        d.vel.y *= -0.3;
+        d.vel.x *= 0.55; d.vel.z *= 0.55;
+        d.spin.multiplyScalar(0.5);
+        if (Math.abs(d.vel.y) < 1.2 && Math.hypot(d.vel.x, d.vel.z) < 1.5) {
+          // Come to rest lying on a side.
+          const q = Math.PI / 2;
+          r.x = Math.round(r.x / q) * q;
+          r.z = Math.round(r.z / q) * q;
+          const upright = Math.abs(Math.cos(r.x) * Math.cos(r.z)) > 0.5;
+          m.y = upright ? d.half : d.lie;
+          d.vel.set(0, 0, 0);
+          d.flying = false;
+        }
+      }
+    }
+    return [...hits];
   }
 
   // A round fountain in the middle of the street: its sloping stone rim is a jump from any side.
@@ -625,6 +787,10 @@ export class World {
   setRoute(delivery) {
     for (const c of this.checkpoints) this.scene.remove(c.mesh);
     for (const r of this.ramps) this.scene.remove(r.mesh);
+    for (const o of [...this.roadworks, ...this.debris.map((d) => d.mesh)]) this.scene.remove(o);
+    this.roadworks = [];
+    this.debris = [];
+    this.colliders = this.colliders.filter((c) => !c.ramp);
     this.checkpoints = [];
     this.ramps = [];
 
@@ -664,12 +830,17 @@ export class World {
         lastMark = travelled + s;
       }
       // Jumps on every other long straight, a third of the way along: pieces of the city
-      // (a flight of steps, a fountain, a plank on fruit crates, a stall's sloping awning).
+      // (entrance steps to a palazzo, a fountain, a builders' plank in front of road works,
+      // a parked tipper truck with its body down).
       if (len >= 3 * CELL && !onDetour && longSegs++ % 2 === 0) {
         const p = a.clone().addScaledVector(dir, len * 0.35);
-        const kind = ['stairs', 'fountain', 'crates', 'awning'][rampKind++ % 4];
+        let kind = ['stairs', 'fountain', 'crates', 'truck'][rampKind++ % 4];
+        // Entrance steps need an ordinary palazzo beside them.
+        if (kind === 'stairs' && !this.plainBlock(p.x + dir.y * 14, p.y - dir.x * 14)) kind = 'crates';
+        // Steps, planks and the truck stand against the kerb on the left; fountains sit mid-street.
+        const off = { stairs: HALF - 2.3, crates: HALF - 1.7, truck: HALF - 1.9 }[kind];
         if (kind === 'fountain') this.addFountainJump(p.x, p.y);
-        else this.addRamp(p.x + dir.y * 2.5, p.y - dir.x * 2.5, heading, kind);
+        else this.addRamp(p.x + dir.y * off, p.y - dir.x * off, heading, kind);
       }
       travelled += len;
     }
@@ -698,4 +869,90 @@ export class World {
     this.customerBeam.position.x = end.x;
     this.customerBeam.position.z = end.y;
   }
+}
+
+// --- Loose road-works pieces. Each mesh is centred on its middle so it tumbles about it.
+// half: resting height of the centre; lie: centre height when knocked over; r: hit radius.
+
+function stripes(a, b, n = 8) {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 8;
+  const g = c.getContext('2d');
+  for (let k = 0; k < n; k++) { g.fillStyle = k % 2 ? b : a; g.fillRect(k * 64 / n, 0, 64 / n, 8); }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+let stripeTex;
+
+function barrier(lamp) {
+  stripeTex ??= stripes('#d42a1e', '#ffffff');
+  const g = new THREE.Group();
+  for (const y of [0.3, -0.05]) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(2, 0.22, 0.06), mat(0xffffff, { map: stripeTex }));
+    bar.position.y = y;
+    g.add(bar);
+  }
+  for (const sx of [-0.85, 0.85]) {
+    const leg = box(0.07, 1, 0.07, 0xd8d8d8);
+    leg.position.set(sx, -0.05, 0);
+    const foot = box(0.1, 0.06, 0.7, 0x333333);
+    foot.position.set(sx, -0.52, 0);
+    g.add(leg, foot);
+  }
+  if (lamp) {
+    const l = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.14, 10),
+      new THREE.MeshStandardMaterial({ color: 0xffa21a, emissive: 0xff9a10, emissiveIntensity: 2.5 }));
+    l.position.set(0.85, 0.52, 0);
+    g.add(l);
+  }
+  return { mesh: g, half: 0.55, lie: 0.12, r: 1.1, mass: 1.2 };
+}
+
+let coneMat;
+function cone() {
+  coneMat ??= new THREE.MeshStandardMaterial({ map: stripes('#ff6a13', '#f4f4f4', 4), roughness: 0.6 });
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.7, 12, 1, true), coneMat);
+  body.material.map.rotation = Math.PI / 2;
+  body.position.y = 0.04;
+  const base = box(0.46, 0.06, 0.46, 0x222222);
+  base.position.y = -0.33;
+  g.add(body, base);
+  return { mesh: g, half: 0.36, lie: 0.2, r: 0.35, mass: 0.6 };
+}
+
+function cobble() {
+  const g = new THREE.Group();
+  g.add(box(0.4, 0.2, 0.4, 0x3a3936));
+  return { mesh: g, half: 0.1, lie: 0.1, r: 0.3, mass: 0.9 };
+}
+
+function sign() {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 112;
+  const cg = c.getContext('2d');
+  cg.fillStyle = '#ffffff';
+  cg.beginPath(); cg.moveTo(64, 4); cg.lineTo(124, 108); cg.lineTo(4, 108); cg.fill();
+  cg.strokeStyle = '#d42a1e'; cg.lineWidth = 12; cg.lineJoin = 'round';
+  cg.beginPath(); cg.moveTo(64, 12); cg.lineTo(116, 102); cg.lineTo(12, 102); cg.closePath(); cg.stroke();
+  // A digging worker, the European road-works pictogram.
+  cg.fillStyle = '#111';
+  cg.beginPath(); cg.arc(58, 50, 6, 0, Math.PI * 2); cg.fill();
+  cg.lineWidth = 6; cg.lineCap = 'round'; cg.strokeStyle = '#111';
+  cg.beginPath(); cg.moveTo(60, 58); cg.lineTo(68, 76); cg.lineTo(58, 92); cg.moveTo(68, 76); cg.lineTo(78, 92); cg.moveTo(62, 62); cg.lineTo(46, 74); cg.stroke();
+  cg.lineWidth = 3;
+  cg.beginPath(); cg.moveTo(40, 66); cg.lineTo(50, 92); cg.stroke();
+  cg.fillRect(76, 82, 22, 10);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  const g = new THREE.Group();
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.875), new THREE.MeshStandardMaterial({ map: t, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide }));
+  plate.position.y = 0.4;
+  const pole = box(0.06, 1.6, 0.06, 0x888888);
+  pole.position.set(0, -0.05, -0.04);
+  const foot = box(0.6, 0.08, 0.6, 0x333333);
+  foot.position.y = -0.82;
+  g.add(plate, pole, foot);
+  return { mesh: g, half: 0.86, lie: 0.15, r: 0.45, mass: 0.8 };
 }

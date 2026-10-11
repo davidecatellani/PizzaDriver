@@ -167,6 +167,7 @@ export class Player {
       // Strict overlap: a rider resting exactly against a wall (after the last push) is not hitting it.
       // (Treating that contact as a hit used to stop riders dead along walls.)
       const E = 1e-4;
+      if (c.top !== undefined && p.y > c.top) continue;   // riding over a low obstacle (a truck's cab)
       if (p.x + r <= c.minX + E || p.x - r >= c.maxX - E || p.z + r <= c.minZ + E || p.z - r >= c.maxZ - E) continue;
       const pushes = [
         ['x', c.minX - r - p.x], ['x', c.maxX + r - p.x],
