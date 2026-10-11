@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Pizza Driver</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div class="hud-left">
+      <div class="label">TIME</div>
+      <div id="time" class="time">14</div>
+    </div>
+    <div class="hud-right">
+      <div id="position" class="position">1<sup>st</sup><span>/4</span></div>
+      <div class="bar-row"><span class="label">PIZZA</span><div class="bar"><div id="heat" class="fill heat"></div></div></div>
+      <div class="bar-row"><span class="label">BOOST</span><div class="bar"><div id="boost" class="fill boost"></div></div></div>
+    </div>
+    <div id="toast" class="toast"></div>
+  </div>
+
+  <button id="boost-btn" class="touch-only hidden">BOOST</button>
+  <button id="mute-btn" class="mute" aria-label="Mute">♪</button>
+
+  <div id="menu" class="screen">
+    <h1>PIZZA<br />DRIVER</h1>
+    <p class="sub">Napoli · Delivery 1</p>
+    <button id="play-btn" class="big">RIDE!</button>
+    <p class="hint desktop-only">← → steer · ↓ brake · SPACE boost · M mute</p>
+    <p class="hint touch-only">Hold left / right to steer · BOOST button for turbo</p>
+    <p id="total-tips" class="tips"></p>
+  </div>
+
+  <div id="countdown" class="screen transparent hidden"><div id="count" class="count">3</div></div>
+
+  <div id="timeup" class="screen hidden">
+    <h2>OUT OF TIME!</h2>
+    <p class="sub">The pizza is getting cold…</p>
+    <button id="continue-btn" class="big ad">▶ +10 SECONDS</button>
+    <button id="retry-btn">Retry</button>
+  </div>
+
+  <div id="delivered" class="screen hidden">
+    <h2>DELIVERED!</h2>
+    <div id="result" class="result"></div>
+    <button id="double-btn" class="big ad">▶ DOUBLE TIPS</button>
+    <button id="next-btn">Next delivery</button>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
