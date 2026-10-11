@@ -3,15 +3,12 @@ import { PLAYER } from './config.js';
 // What delivery tips buy: rides with their own handling, upgrades, and the rider's style.
 // Everything is drawn in code (src/vehicles.js, src/rider.js); prices are in tips ($).
 
+// Rides are looks only (Davide): every ride handles exactly like the scooter.
 export const RIDES = [
-  { id: 'scooter', name: 'E-Scooter', price: 0, blurb: 'Steady and forgiving.',
-    stats: { maxSpeed: 30, accel: 22, turnRate: 3.0 } },
-  { id: 'skate', name: 'E-Skate', price: 150, blurb: 'Twitchy, quick off the line, loves to drift.',
-    stats: { maxSpeed: 31, accel: 27, turnRate: 3.5, driftTurn: 2.2, driftDrag: 4 } },
-  { id: 'bike', name: 'E-Bike', price: 400, blurb: 'Fast and heavy: big jumps, hard to knock over.',
-    stats: { maxSpeed: 34, accel: 19, turnRate: 2.7, wheelieJump: 1.55, mass: 1.5, push: false } },
-  { id: 'hover', name: 'Hoverboard', price: 900, blurb: 'Floats over Napoli. Long, slow jumps.',
-    stats: { maxSpeed: 36, accel: 24, turnRate: 3.3, gravity: 22, turboPerAir: 2, float: 0.22, push: false } },
+  { id: 'scooter', name: 'E-Scooter', price: 0, blurb: 'The classic delivery ride.' },
+  { id: 'skate', name: 'E-Skate', price: 150, blurb: 'Glowing deck, orange wheels.' },
+  { id: 'bike', name: 'E-Bike', price: 400, blurb: 'Red frame with a pizza rack.', stats: { push: false } },
+  { id: 'hover', name: 'Hoverboard', price: 900, blurb: 'Floats over the basoli.', stats: { float: 0.22, push: false } },
 ];
 
 // Five levels each; `apply(stats, level)` changes the ride's numbers.
@@ -68,7 +65,7 @@ export class Profile {
   // The tuning the player rides with: the base numbers, the ride's own, then the upgrades.
   stats() {
     const s = { ...PLAYER, heatLoss: 1, mass: 1, float: 0 };
-    Object.assign(s, RIDES.find((r) => r.id === this.ride).stats);
+    Object.assign(s, RIDES.find((r) => r.id === this.ride).stats);   // visual only: foot pushing, hovering
     for (const u of UPGRADES) u.apply(s, this.level(u.id));
     return s;
   }

@@ -79,12 +79,7 @@ export class Garage {
     for (const b of this.el.querySelectorAll('.g-tabs button')) b.classList.toggle('on', b.dataset.tab === this.tab);
     let html = '';
     if (this.tab === 'rides') {
-      const bar = (v, lo, hi) => `<i style="width:${Math.round(8 + 40 * (v - lo) / (hi - lo))}px"></i>`;
-      for (const r of RIDES) {
-        const s = r.stats;
-        const extra = `<div class="g-stats"><span>SPEED${bar(s.maxSpeed, 28, 36)}</span><span>ACCEL${bar(s.accel, 18, 27)}</span><span>TURN${bar(s.turnRate, 2.5, 3.5)}</span></div>`;
-        html += this.item('ride', { ...r, icon: RIDE_ICON[r.id], extra }, p.owns(r.id), p.ride === r.id);
-      }
+      for (const r of RIDES) html += this.item('ride', { ...r, icon: RIDE_ICON[r.id] }, p.owns(r.id), p.ride === r.id);
     } else if (this.tab === 'upgrades') {
       for (const u of UPGRADES) {
         const l = p.level(u.id);
