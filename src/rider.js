@@ -15,7 +15,7 @@ export function makeRider(shirt = 0xffffff, cap = 0xd62828, riderId = 'rider') {
       w.rotation.z = Math.PI / 2; w.position.set(0, 0.28, z); s.add(w);
     }
     return s;
-  });
+  }, { vehicle: true, tallFront: true });
   scooter.rotation.y = 0;
   g.add(scooter);
 

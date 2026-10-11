@@ -1,1 +1,30 @@
-{ "models": [] }
+{
+  "models": [
+    "ape",
+    "building_1",
+    "building_2",
+    "bus",
+    "cafe_table",
+    "cat",
+    "dumpster",
+    "e_bike",
+    "e_skateboard",
+    "fiat_500",
+    "fountain",
+    "kick_scooter",
+    "laundry_curtain",
+    "market_stall_fish",
+    "market_stall_fruit",
+    "nonna",
+    "pizza_box",
+    "pizzeria",
+    "ramp",
+    "rider",
+    "rival_1",
+    "rival_2",
+    "road_barrier",
+    "street_lamp",
+    "traffic_cop",
+    "vesuvius"
+  ]
+}

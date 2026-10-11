@@ -32,7 +32,7 @@ function carMesh(kind) {
       g.add(wh);
     }
     return g;
-  });
+  }, { vehicle: true });
 }
 
 export class Traffic {
