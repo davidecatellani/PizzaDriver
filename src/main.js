@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { CELL, DELIVERIES, RACE, PLAYER } from './config.js';
 import { loadModels } from './assets.js';
 import { World } from './world.js';
+import { Nav } from './nav.js';
+import { Minimap } from './minimap.js';
 import { Player } from './player.js';
 import { makeRivals } from './rivals.js';
 import { Traffic } from './traffic.js';
@@ -13,7 +15,7 @@ const $ = (id) => document.getElementById(id);
 const ui = {
   hud: $('hud'), time: $('time'), position: $('position'), heat: $('heat'), boost: $('boost'), toast: $('toast'),
   menu: $('menu'), countdown: $('countdown'), count: $('count'), timeup: $('timeup'), delivered: $('delivered'),
-  result: $('result'), subtitle: $('subtitle'), boostBtn: $('boost-btn'), muteBtn: $('mute-btn'), totalTips: $('total-tips'),
+  result: $('result'), subtitle: $('subtitle'), turn: $('turn'), boostBtn: $('boost-btn'), muteBtn: $('mute-btn'), totalTips: $('total-tips'),
 };
 
 const MIDGAME_INTERVAL = 120; // seconds between midgame ads
@@ -43,6 +45,8 @@ class Game {
     this.sun = sun;
 
     this.world = new World(this.scene);
+    this.nav = new Nav(this.scene);
+    this.minimap = new Minimap($('minimap'));
     this.player = new Player(this.scene, this.world);
     this.rivals = makeRivals(this.scene, this.world);
     this.traffic = new Traffic(this.scene);
@@ -51,12 +55,6 @@ class Game {
     this.audio.setMuted(store.get('muted', false));
     ui.muteBtn.classList.toggle('off', this.audio.muted);
 
-    this.arrow = new THREE.Mesh(
-      new THREE.ConeGeometry(0.6, 1.6, 12),
-      new THREE.MeshBasicMaterial({ color: 0xffd23f }),
-    );
-    this.arrow.geometry.rotateX(Math.PI / 2);
-    this.scene.add(this.arrow);
 
     this.state = 'menu';
     this.lastAd = performance.now() / 1000;
@@ -129,12 +127,13 @@ class Game {
 
   resetRace() {
     const d = DELIVERIES[this.deliveryIndex];
-    // Route the player is scored on: pizzeria, checkpoints, then the customer. Used for ranking.
-    this.route = [[0, 0], ...d.checkpoints, d.customer].map(([x, z]) => new THREE.Vector2(x * CELL, z * CELL));
+    this.delivery = d;
     this.world.setRoute(d);
-    const dir = this.route[1].clone().sub(this.route[0]).normalize();
+    this.nav.setPath(d.path);
+    const [p0, p1] = d.path;
+    const dir = new THREE.Vector2(p1[0] - p0[0], p1[1] - p0[1]).normalize();
     this.player.reset(-dir.x * 5 - dir.y * 4, -dir.y * 5 + dir.x * 4, Math.atan2(dir.x, dir.y));
-    for (const r of this.rivals) r.reset(d.rivals);
+    for (const r of this.rivals) r.reset(d.path);
     this.timeLeft = RACE.startTime;
     this.cpIndex = 0;
     this.usedSecret = false;
@@ -176,17 +175,8 @@ class Game {
     this.toastTimer = setTimeout(() => ui.toast.classList.remove('show'), ms);
   }
 
-  // Distance left along the scored route.
-  playerRemaining() {
-    const target = this.cpIndex + 1;
-    const p = this.player.pos;
-    let d = Math.hypot(this.route[target].x - p.x, this.route[target].y - p.z);
-    for (let i = target; i < this.route.length - 1; i++) d += this.route[i].distanceTo(this.route[i + 1]);
-    return d;
-  }
-
   rank() {
-    const mine = this.playerRemaining();
+    const mine = this.nav.remaining();
     return 1 + this.rivals.filter((r) => r.remaining() < mine).length;
   }
 
@@ -220,14 +210,15 @@ class Game {
     this.updateHUD();
     this.updateCamera(dt);
 
-    // Spin the active checkpoint ring and point the arrow at the next target.
+    // Spin the active checkpoint ring and follow the player along the route.
     const cp = this.world.checkpoints[this.cpIndex];
     if (cp) cp.ring.rotation.z += dt;
-    const tgt = cp ? cp.pos : this.world.customerPos;
     const p = this.player.pos;
-    this.arrow.position.set(p.x, p.y + 4.2, p.z);
-    this.arrow.lookAt(tgt.x, p.y + 4.2, tgt.z);
-    this.arrow.visible = racing;
+    this.nav.update(p, racing);
+    const turn = racing && this.nav.nextTurn();
+    ui.turn.classList.toggle('show', !!turn);
+    if (turn) ui.turn.textContent = `${turn.side === 'left' ? '⬅' : '➡'} ${Math.max(0, Math.round(turn.dist / 5) * 5)}m`;
+    this.minimap.draw(this);
   }
 
   raceLogic(dt) {
@@ -258,7 +249,7 @@ class Game {
     }
 
     const cp = this.world.checkpoints[this.cpIndex];
-    if (cp && Math.hypot(cp.pos.x - p.pos.x, cp.pos.z - p.pos.z) < 8) {
+    if (cp && Math.hypot(cp.pos.x - p.pos.x, cp.pos.z - p.pos.z) < 11) {
       cp.mesh.visible = false;
       this.cpIndex++;
       this.timeLeft += RACE.checkpointBonus;
@@ -268,7 +259,7 @@ class Game {
       if (next) next.mesh.visible = true;
       else this.world.customerBeam.visible = true;
     }
-    if (!cp && p.pos.distanceTo(this.world.customerPos) < 8) return this.deliver();
+    if (!cp && p.pos.distanceTo(this.world.customerPos) < 10) return this.deliver();
 
     this.audio.bpm = this.timeLeft < RACE.hurryTime ? 180 : 156;
     const sec = Math.ceil(this.timeLeft);

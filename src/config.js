@@ -9,7 +9,7 @@ export const PLAYER = {
   maxSpeed: 30,
   accel: 22,
   brake: 45,
-  turnRate: 2.4,                 // rad/s at low speed
+  turnRate: 3.0,                 // rad/s at low speed
   boostMultiplier: 1.55,
   boostDrain: 0.45,              // meter per second while boosting
   boostRecharge: 0.06,           // meter per second passive
@@ -25,39 +25,40 @@ export const RACE = {
 };
 
 // Napoli deliveries, in intersection coordinates (multiplied by CELL). Every delivery starts at the
-// pizzeria corner (0, 0). Checkpoints are passed in order; rivals follow `rivals` along the streets.
-// The palazzo covers blocks (2..3, 2..3): its tunnel along row 3 is the secret shortcut,
-// so rival paths never cross its inside lines (x = 3 or z = 3 between 2 and 4).
+// pizzeria corner (0, 0). `path` is the street route: rivals ride it and the on-road arrows show it.
+// Checkpoints sit mid-street on that route, never on a corner, and are passed in order.
+// The palazzo covers blocks (2..3, 2..3): its tunnel along row 3 is the secret shortcut, so paths
+// go around it, and deliveries 1 and 3 put checkpoints on both sides of the tunnel.
 export const DELIVERIES = [
   {
     name: 'Lungomare',
-    checkpoints: [[0, 3], [2, 3], [4, 3], [4, 5]],
+    path: [[0, 0], [0, 3], [2, 3], [2, 4], [4, 4], [4, 3], [6, 3], [6, 5]],
+    checkpoints: [[0, 1.5], [1, 3], [5, 3], [6, 4]],
     customer: [6, 5],
-    rivals: [[0, 0], [0, 3], [2, 3], [2, 4], [4, 4], [4, 3], [4, 5], [6, 5]],
   },
   {
     name: 'Piazza del Gesù',
-    checkpoints: [[3, 0], [3, 2], [1, 2], [1, 6]],
+    path: [[0, 0], [3, 0], [3, 2], [1, 2], [1, 6], [2, 6]],
+    checkpoints: [[1.5, 0], [3, 1], [2, 2], [1, 4]],
     customer: [2, 6],
-    rivals: [[0, 0], [3, 0], [3, 2], [1, 2], [1, 6], [2, 6]],
   },
   {
     name: 'Mercato',
-    checkpoints: [[0, 1], [4, 1], [4, 3], [2, 3], [2, 6]],
-    customer: [0, 6],
-    rivals: [[0, 0], [0, 1], [4, 1], [4, 3], [4, 4], [2, 4], [2, 3], [2, 6], [0, 6]],
+    path: [[0, 0], [6, 0], [6, 3], [4, 3], [4, 4], [1, 4], [1, 3]],
+    checkpoints: [[3, 0], [6, 1.5], [5, 3]],
+    customer: [1, 3],
   },
   {
     name: 'Quartieri Spagnoli',
-    checkpoints: [[6, 0], [6, 3], [5, 3], [5, 6]],
+    path: [[0, 0], [6, 0], [6, 3], [5, 3], [5, 6], [3, 6]],
+    checkpoints: [[3, 0], [6, 1.5], [5, 4.5]],
     customer: [3, 6],
-    rivals: [[0, 0], [6, 0], [6, 3], [5, 3], [5, 6], [3, 6]],
   },
   {
     name: 'Stadio',
-    checkpoints: [[0, 5], [3, 5], [3, 4], [6, 4], [6, 1]],
+    path: [[0, 0], [0, 5], [3, 5], [3, 4], [6, 4], [6, 0], [5, 0]],
+    checkpoints: [[0, 2.5], [1.5, 5], [4.5, 4], [6, 2]],
     customer: [5, 0],
-    rivals: [[0, 0], [0, 5], [3, 5], [3, 4], [6, 4], [6, 1], [6, 0], [5, 0]],
   },
 ];
 

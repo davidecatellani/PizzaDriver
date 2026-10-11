@@ -309,11 +309,16 @@ export class World {
   setRoute(delivery) {
     for (const c of this.checkpoints) this.scene.remove(c.mesh);
     this.checkpoints = [];
-    const pts = [[0, 0], ...delivery.checkpoints];
-    for (let i = 1; i < pts.length; i++) {
-      const [px, pz] = pts[i - 1];
-      const [x, z] = pts[i];
-      const heading = Math.atan2(x - px, z - pz);
+    for (const [x, z] of delivery.checkpoints) {
+      // Face the ring along the street segment it sits on.
+      let heading = 0;
+      const path = delivery.path;
+      for (let i = 0; i < path.length - 1; i++) {
+        const [ax, az] = path[i], [bx, bz] = path[i + 1];
+        const onX = ax === bx && x === ax && z >= Math.min(az, bz) && z <= Math.max(az, bz);
+        const onZ = az === bz && z === az && x >= Math.min(ax, bx) && x <= Math.max(ax, bx);
+        if (onX || onZ) { heading = Math.atan2(bx - ax, bz - az); break; }
+      }
       const g = new THREE.Group();
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(6.5, 0.45, 8, 32),

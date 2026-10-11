@@ -63,3 +63,17 @@ button:active { transform: translateY(3px); }
   .touch-only { display: block; }
   .desktop-only { display: none; }
 }
+
+.minimap {
+  position: absolute; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  width: 140px; height: 140px; border-radius: 50%; border: 3px solid #fff; background: #0006;
+}
+.turn {
+  position: absolute; bottom: 16%; width: 100%; text-align: center; font-size: 40px; color: #fff;
+  opacity: 0; transition: opacity .15s;
+}
+.turn.show { opacity: 1; }
+@media (max-width: 600px) {
+  .minimap { width: 100px; height: 100px; }
+  .turn { font-size: 30px; }
+}

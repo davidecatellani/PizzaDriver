@@ -49,7 +49,7 @@ export class Player {
 
     // Steering gets slightly tighter at low speed; much weaker in the air.
     const grip = this.airborne ? 0.25 : 1;
-    const speedFactor = THREE.MathUtils.clamp(this.speed / 8, 0, 1) * (1.15 - 0.35 * (this.speed / (PLAYER.maxSpeed * 1.5)));
+    const speedFactor = THREE.MathUtils.clamp(this.speed / 8, 0, 1) * (1.1 - 0.2 * (this.speed / (PLAYER.maxSpeed * 1.5)));
     this.heading += steer * PLAYER.turnRate * speedFactor * grip * dt;
     this.lean = THREE.MathUtils.lerp(this.lean, steer * 0.35 * Math.min(1, this.speed / 15), 1 - Math.exp(-8 * dt));
 
