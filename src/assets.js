@@ -32,6 +32,8 @@ export async function loadModels() {
   results.forEach((r, i) => { if (r.status === 'rejected') console.warn(`model ${ids[i]} failed:`, r.reason); });
 }
 
+export const hasModel = (id) => loaded.has(id);
+
 // Returns a fresh object for `id`, scaled to fit `size` (largest dimension),
 // or the placeholder built by `fallback()` when no model is available.
 // Vehicles (`opts.vehicle`) are turned so their length runs along +z; with `opts.tallFront`

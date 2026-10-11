@@ -28,15 +28,20 @@ export class Player {
     this.lean = 0;
     this.drift = 0;            // seconds into the current drift
     this.driftYaw = 0;         // visual slide angle
+    this.crashT = 0;           // seconds left of the crash flail
+    this.cheer = false;
+    this.steer = 0;
     this.sync();
   }
 
   emit(type, data) {
+    if (type === 'crash') this.crashT = 0.7;
     this.events.push({ type, ...data });
   }
 
   update(dt, input, active) {
     const steer = active ? input.steer : 0;
+    this.steer = steer;
     const wantBoost = active && input.boost && this.boost > 0.02;
     this.boosting = wantBoost;
 
@@ -103,6 +108,12 @@ export class Player {
       this.pos.y = ground;
     }
 
+    this.crashT = Math.max(0, this.crashT - dt);
+    this.mesh.userData.rig?.update(dt, {
+      speed: Math.min(1, this.speed / PLAYER.maxSpeed), steer: this.steer, air: this.airborne, airTime: this.airTime,
+      drift: this.drift > 0, boost: this.boosting && this.speed > 5, crash: this.crashT > 0, cheer: this.cheer,
+      kick: active && !this.airborne && this.speed > 0.5 && this.speed < 9 && !input.brake,
+    });
     this.sync();
   }
 

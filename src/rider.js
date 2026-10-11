@@ -1,11 +1,22 @@
 import * as THREE from 'three';
-import { box, mat, makeObject } from './assets.js';
+import { box, mat, makeObject, hasModel } from './assets.js';
+import { rigModel } from './rig.js';
 
-// Rider standing on an electric kick scooter. Placeholder shapes until the Meshy models land.
+// Rider standing on an electric kick scooter, or a character model that already sits on its own
+// vehicle. Meshy characters get a procedural skeleton (src/rig.js), reachable as userData.rig.
 export function makeRider(shirt = 0xffffff, cap = 0xd62828, riderId = 'rider') {
   const g = new THREE.Group();
+  const ownVehicle = riderId === 'rival_1' && hasModel(riderId);
 
-  const scooter = makeObject('kick_scooter', 2.6, () => {
+  if (ownVehicle) {
+    const body = makeObject(riderId, 2.6, () => null, { vehicle: true });
+    g.add(body);
+    g.userData.rig = rigModel(body);
+    g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    return g;
+  }
+
+  const scooter = makeObject('kick_scooter', 2.0, () => {
     const s = new THREE.Group();
     const deck = box(0.6, 0.15, 2.2, 0x1b1b1f); deck.position.y = 0.35; s.add(deck);
     const stem = box(0.12, 1.9, 0.12, 0x2a2a2e); stem.position.set(0, 1.3, 1.0); stem.rotation.x = -0.15; s.add(stem);
@@ -16,7 +27,6 @@ export function makeRider(shirt = 0xffffff, cap = 0xd62828, riderId = 'rider') {
     }
     return s;
   }, { vehicle: true, tallFront: true });
-  scooter.rotation.y = 0;
   g.add(scooter);
 
   const body = makeObject(riderId, 1.8, () => {
@@ -29,10 +39,39 @@ export function makeRider(shirt = 0xffffff, cap = 0xd62828, riderId = 'rider') {
     const pizza = box(0.8, 0.22, 0.8, 0xe9d3a8); pizza.position.set(0, 1.25, -0.35); r.add(pizza);
     return r;
   });
-  body.position.set(0, 0.45, 0);
+  body.position.set(0, hasModel('kick_scooter') ? 0.3 : 0.45, 0);
   g.add(body);
-  g.userData.body = body;
+
+  if (hasModel(riderId)) {
+    // Stand behind the handlebar and hold its grips.
+    g.updateMatrixWorld(true);
+    const bar = handlebar(scooter);
+    body.position.z = THREE.MathUtils.clamp(bar.z - 0.68, -0.4, 0.5);
+    const rig = rigModel(body);
+    if (rig) {
+      body.updateMatrixWorld(true);
+      rig.setGrips(rig.model.worldToLocal(bar.clone().setX(0.3)));
+      g.userData.rig = rig;
+    }
+  }
 
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return g;
+}
+
+// Centre of the scooter's handlebar: the top of the model, towards its front.
+function handlebar(scooter) {
+  const box = new THREE.Box3().setFromObject(scooter);
+  const cut = box.max.y - 0.08 * (box.max.y - box.min.y);
+  const v = new THREE.Vector3();
+  let z = 0, n = 0;
+  scooter.traverse((o) => {
+    if (!o.isMesh) return;
+    const pos = o.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      if (v.y > cut) { z += v.z; n++; }
+    }
+  });
+  return new THREE.Vector3(0, box.max.y - 0.05, n ? z / n : box.max.z);
 }

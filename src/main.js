@@ -277,6 +277,7 @@ class Game {
 
   deliver() {
     this.state = 'delivered';
+    this.player.cheer = true;
     SDK.gameplayStop();
     SDK.happyTime();
     this.audio.stopMusic();

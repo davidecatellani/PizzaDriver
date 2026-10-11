@@ -32,6 +32,10 @@ export class Rival {
   }
 
   update(dt, active) {
+    this.mesh.userData.rig?.update(dt, {
+      speed: Math.min(1, this.speed / PLAYER.maxSpeed), steer: this.finished ? 0 : this.steer || 0, air: false, airTime: 0,
+      drift: false, boost: false, crash: this.stun > 0.3, cheer: this.finished, kick: active && this.speed > 0.5 && this.speed < 9,
+    });
     if (this.finished) return;
     this.stun = Math.max(0, this.stun - dt);
     const max = PLAYER.maxSpeed * this.def.speed * (this.stun > 0 ? 0.4 : 1);
@@ -48,7 +52,9 @@ export class Rival {
     let d = want - this.heading;
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;
-    this.heading += THREE.MathUtils.clamp(d, -3 * dt, 3 * dt);
+    const turn = THREE.MathUtils.clamp(d, -3 * dt, 3 * dt);
+    this.heading += turn;
+    this.steer = THREE.MathUtils.clamp(turn / (3 * dt), -1, 1);
     // Slow down for sharp turns.
     if (Math.abs(d) > 0.6) this.speed *= 1 - 1.5 * dt;
 
