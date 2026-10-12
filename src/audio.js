@@ -198,8 +198,9 @@ export class Audio {
   }
 
   power(n, t, dur, vol) {
-    for (const k of [0, 7, 12]) {
-      for (const det of [-7, 7]) {
+    // Root, fifth and octave, with a detuned double of the root for width.
+    for (const [k, det] of [[0, -7], [0, 7], [7, 0], [12, 4]]) {
+      {
         const o = this.ctx.createOscillator(), g = this.ctx.createGain();
         o.type = 'sawtooth';
         o.frequency.value = NOTE(n + k);
@@ -235,7 +236,7 @@ export class Audio {
       const pick = 60 / this.bpm / 8;
       for (let k = 0; k * pick < dur - 0.01; k++) {
         const tt = t + k * pick;
-        for (const [f, type, v] of [[freq, 'triangle', 0.1], [freq * 2.003, 'square', 0.025]]) {
+        for (const [f, type, v] of [[freq, 'square', 0.06]]) {
           const o = ctx.createOscillator(), g = ctx.createGain();
           o.type = type; o.frequency.value = f;
           g.gain.setValueAtTime(k % 2 ? v * 0.7 : v, tt);

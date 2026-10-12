@@ -42,7 +42,7 @@ const store = {
 class Game {
   constructor() {
     this.renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: true });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));   // sharp enough; 2x costs phones dearly
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.scene = new THREE.Scene();
@@ -156,10 +156,23 @@ class Game {
         });
       };
     }
-    $('ranking-btn').onclick = () => { this.state = 'ranking'; this.renderRanking(); this.show($('ranking')); };
+    // The board opens from the menu and from the end-of-race screens, and BACK returns there.
+    for (const [id, screen] of [['ranking-btn', ui.menu], ['ranking-btn2', ui.delivered], ['ranking-btn3', ui.timeup]]) {
+      $(id).onclick = () => {
+        this.rankingFrom = { state: this.state, screen };
+        this.state = 'ranking';
+        this.renderRanking();
+        this.show($('ranking'));
+      };
+    }
+    for (const b of document.querySelectorAll('.menu-back')) b.onclick = () => this.toMenu();
     $('tab-world').onclick = () => { this.boardTab = 'world'; this.renderRanking(); };
     $('tab-local').onclick = () => { this.boardTab = 'local'; this.renderRanking(); };
-    $('ranking-back').onclick = () => { this.state = 'menu'; this.show(ui.menu); };
+    $('ranking-back').onclick = () => {
+      const from = this.rankingFrom || { state: 'menu', screen: ui.menu };
+      this.state = from.state;
+      this.show(from.screen);
+    };
     $('rider-name').onclick = () => this.askName();
     const done = () => {
       this.playerName = $('name-input').value.trim().slice(0, 14) || 'Rider';
@@ -324,6 +337,7 @@ class Game {
       this.scene.remove(this.cityRoot);
       this.cityRoot.traverse((o) => {
         if (!o.isMesh && !o.isInstancedMesh) return;
+        if (o.isInstancedMesh) o.dispose();
         o.geometry.dispose();
         for (const m of [o.material].flat()) { m.map?.dispose(); m.normalMap?.dispose(); m.dispose(); }
       });
@@ -463,6 +477,7 @@ class Game {
       who: r, x: r.pos.x, y: r.pos.y, z: r.pos.z, fx: Math.sin(r.heading), fz: Math.cos(r.heading), speed: Math.abs(r.speed), r: 0.6,
     }));
     for (const c of this.traffic.cars) {
+      if (c.hidden) continue;
       const l = c.lane;
       movers.push({ x: c.pos.x, y: 0, z: c.pos.z, fx: l.axis === 'x' ? l.dir : 0, fz: l.axis === 'z' ? l.dir : 0, speed: c.speed, r: 1.1 });
     }
@@ -736,6 +751,22 @@ class Game {
       }
     }
     this.player.events.length = 0;
+  }
+
+  // From the end of a race back to the title menu (to switch city, see the board, ...).
+  toMenu() {
+    this.audio.stopMusic();
+    if (this.state === 'delivered') {   // done with this route: the menu offers the next one
+      this.deliveryIndex = (this.deliveryIndex + 1) % this.city.deliveries.length;
+      this.deliveryAt[this.cityId] = this.deliveryIndex;
+      store.set('deliveryAt', this.deliveryAt);
+    }
+    this.resetRace();
+    for (const el of [ui.hud, ui.boostBtn, $('brake-btn'), $('kick-btn')]) el.classList.add('hidden');
+    this.state = 'menu';
+    this.show(ui.menu);
+    this.showTotal();
+    this.showCity();
   }
 
   updateHUD() {
