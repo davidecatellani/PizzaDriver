@@ -89,3 +89,7 @@ export const RIVALS = [
   { name: 'Lola', color: 0x8a3fd1, speed: 0.89, aggression: 0.4 },
   { name: 'Tony', color: 0xe08a1e, speed: 0.95, aggression: 0.85 },
 ];
+
+// The world leaderboard server (server/ in this repo). Empty: the game keeps its local board only.
+// A build can also set it with VITE_BOARD_URL.
+export const BOARD_URL = import.meta.env.VITE_BOARD_URL || '';

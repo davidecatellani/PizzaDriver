@@ -160,3 +160,7 @@ button:active { transform: translateY(3px); }
 .city-name small { display: block; font-family: Arial, sans-serif; font-size: 14px; opacity: 0.9; }
 .city-name.locked { color: #ffd23f; }
 #play-btn:disabled { opacity: 0.55; cursor: default; }
+.tab { font: inherit; font-size: 16px; padding: 6px 16px; border-radius: 999px; border: 2px solid #ffd23f; background: transparent; color: #ffd23f; cursor: pointer; }
+.tab.on { background: #ffd23f; color: #6a040f; }
+.ranking-list li.wait, .ranking-list li.gap { justify-content: center; background: none; }
+.world-line { font-size: 16px; font-family: Arial, sans-serif; margin-top: 4px; opacity: 0.95; }

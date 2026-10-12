@@ -17,6 +17,7 @@ import * as SDK from './sdk.js';
 import { Profile } from './shop.js';
 import { Garage } from './garage.js';
 import { Ranking } from './ranking.js';
+import { Online } from './online.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -82,6 +83,8 @@ class Game {
     this.garage = new Garage(this, this.profile);
     this.earned = store.get('earned', this.totalTips);   // all-time tips, for the Richest Riders board
     this.ranking = new Ranking(store, RIVALS);
+    this.online = new Online(store);
+    this.boardTab = this.online.enabled ? 'world' : 'local';
     this.playerName = store.get('name', null);
     // Best delivery times in seconds, by 'city:index' (old saves used the bare index, all Napoli).
     this.records = {};
@@ -120,6 +123,8 @@ class Game {
       this.lastTips *= 2;
       this.renderResult();
       this.showRankLine();
+      const route = this.recordKey;
+      this.online.submit(this.playerName || 'Rider', this.earned).then((b) => this.showWorld(b && { ...b, route: null }, route));
       $('double-btn').classList.add('hidden');
     });
     $('next-btn').onclick = async () => {
@@ -152,6 +157,8 @@ class Game {
       };
     }
     $('ranking-btn').onclick = () => { this.state = 'ranking'; this.renderRanking(); this.show($('ranking')); };
+    $('tab-world').onclick = () => { this.boardTab = 'world'; this.renderRanking(); };
+    $('tab-local').onclick = () => { this.boardTab = 'local'; this.renderRanking(); };
     $('ranking-back').onclick = () => { this.state = 'menu'; this.show(ui.menu); };
     $('rider-name').onclick = () => this.askName();
     const done = () => {
@@ -204,11 +211,33 @@ class Game {
     $('rider-name').textContent = this.playerName ? `Rider: ${this.playerName} ✎` : '';
   }
 
+  // The Richest Riders board: the world one from the server, or the local one against the city's riders.
   renderRanking() {
-    const rows = this.ranking.table(this.playerName || 'You', this.earned);
-    $('ranking-list').innerHTML = rows.map((r, i) =>
-      `<li class="${r.me ? 'me' : ''}${i === 0 ? ' top' : ''}"><b>${i + 1}</b><span>${escapeHtml(r.name)}</span><em>$${r.tips}</em></li>`).join('');
-    $('ranking-list').querySelector('.me')?.scrollIntoView({ block: 'center' });
+    $('ranking-tabs').classList.toggle('hidden', !this.online.enabled);
+    $('tab-world').classList.toggle('on', this.boardTab === 'world');
+    $('tab-local').classList.toggle('on', this.boardTab === 'local');
+    const row = (r, i) => `<li class="${r.me ? 'me' : ''}${i === 0 ? ' top' : ''}"><b>${i + 1}</b><span>${escapeHtml(r.name)}</span><em>$${r.tips}</em></li>`;
+    const list = $('ranking-list');
+    if (this.boardTab === 'local') {
+      $('ranking-sub').textContent = 'Napoli riders · all-time tips';
+      list.innerHTML = this.ranking.table(this.playerName || 'You', this.earned).map(row).join('');
+      list.querySelector('.me')?.scrollIntoView({ block: 'center' });
+      return;
+    }
+    $('ranking-sub').textContent = 'World · all-time tips';
+    list.innerHTML = '<li class="wait"><span>Loading…</span></li>';
+    // Send the latest tips first, so the board shows this player where they really are.
+    this.online.submit(this.playerName || 'Rider', this.earned).then((b) => {
+      if (this.boardTab !== 'world' || this.state !== 'ranking') return;
+      if (!b) { list.innerHTML = '<li class="wait"><span>The world board is offline right now.</span></li>'; return; }
+      const t = b.tips;
+      $('ranking-sub').textContent = `World · all-time tips · ${t.total} riders`;
+      const mine = t.me && t.me.rank <= t.top.length;
+      let html = t.top.map((r, i) => row({ ...r, me: mine && i === t.me.rank - 1 }, i)).join('');
+      if (t.me && !mine) html += `<li class="gap"><span>···</span></li>` + row({ name: this.playerName || 'You', tips: t.me.tips, me: true }, t.me.rank - 1).replace(/<b>\d+<\/b>/, `<b>${t.me.rank}</b>`);
+      list.innerHTML = html;
+      list.querySelector('.me')?.scrollIntoView({ block: 'center' });
+    });
   }
 
   show(screen) {
@@ -579,6 +608,9 @@ class Game {
     const order = [...this.rivals.map((r) => ({ name: r.def.name, left: r.remaining() })), { name: null, left: mine }].sort((a, b) => a.left - b.left);
     this.ranking.afterDelivery(Object.fromEntries(order.map((o, i) => [o.name, i + 1])));
     this.addTips(this.lastTips);
+    this.worldLine = '';
+    const route = this.recordKey;
+    this.online.submit(this.playerName || 'Rider', this.earned, route, this.raceTime).then((b) => this.showWorld(b, route));
     if (!record) setTimeout(() => this.audio.shout(), 1300);
     setTimeout(() => this.audio.sfx('tips'), 2600);
     this.rankBefore = before;
@@ -586,6 +618,20 @@ class Game {
     $('double-btn').classList.remove('hidden');
     this.renderResult();
     this.show(ui.delivered);
+  }
+
+  // The world places after a delivery: on the Richest Riders board and on this route.
+  showWorld(b, route) {
+    if (!b || this.state !== 'delivered' || route !== this.recordKey) return;
+    if (b.tips.me) $('rank-line').textContent = `World richest riders: #${b.tips.me.rank} of ${b.tips.total}`;
+    const r = b.route;
+    if (r?.top.length) {
+      const best = r.top[0];
+      this.worldLine = r.me?.rank === 1
+        ? `🌍 WORLD RECORD ${clock(best.time)}!`
+        : `🌍 World best ${clock(best.time)} by ${escapeHtml(best.name)}${r.me ? ` · you #${r.me.rank} of ${r.total}` : ''}`;
+      this.renderResult();
+    }
   }
 
   showRankLine() {
@@ -609,6 +655,7 @@ class Game {
     $('record-result').innerHTML = r.record
       ? `<span class="new-record">🏆 NEW RECORD ${clock(r.time)}</span>${r.best ? ` <small>(${(r.time - r.best).toFixed(1)}s)</small>` : ''}`
       : `Time ${clock(r.time)} · Record ${clock(r.best)} <small>(+${(r.time - r.best).toFixed(1)}s)</small>`;
+    if (this.worldLine) $('record-result').innerHTML += `<div class="world-line">${this.worldLine}</div>`;
   }
 
   // Side kicks, as in Radical Bikers: the player kicks with Z / X (or KICK), rivals riding
