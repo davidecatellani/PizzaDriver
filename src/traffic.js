@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CELL, GRID } from './config.js';
+import { PALAZZO } from './cityKit.js';
 
 // City traffic: lanes on every street in both directions, cars that keep their distance,
 // brake for riders in front of them, honk, and get shoved when hit.
@@ -10,7 +11,9 @@ function lanes() {
   const out = [];
   for (let i = 0; i <= GRID; i++) {
     for (const dir of [1, -1]) {
-      out.push({ axis: 'x', line: i * CELL, dir });
+      // The street at z = 3 cells runs into the landmark block, where only the secret passage goes
+      // through: cars drive in, vanish inside and come out the far side, so the passage stays free.
+      out.push({ axis: 'x', line: i * CELL, dir, cut: i === 3 ? [PALAZZO.minX, PALAZZO.maxX] : null });
       // The street at x = 3 cells is cut by the palazzo.
       if (i !== 3) out.push({ axis: 'z', line: i * CELL, dir });
     }
@@ -18,11 +21,25 @@ function lanes() {
   return out;
 }
 
-// Each kind is modelled once (src/cars.js) and cloned: clones share geometry and materials.
-function carMesh(kind) {
+// Each kind is modelled once (src/cars.js) and drawn as instances: one draw call per part of a
+// kind, however many cars of it are on the streets.
+function instanced(scene, kind, count) {
   kind.proto ??= kind.build(kind);
-  return kind.proto.clone();
+  kind.proto.updateMatrixWorld(true);
+  const parts = [];
+  kind.proto.traverse((o) => {
+    if (!o.isMesh) return;
+    const m = new THREE.InstancedMesh(o.geometry, o.material, count);
+    m.castShadow = o.castShadow;
+    m.receiveShadow = o.receiveShadow;
+    m.onBeforeRender = o.onBeforeRender;   // the police light bar's flash
+    m.frustumCulled = false;               // the instances are all over the city
+    scene.add(m);
+    parts.push({ mesh: m, local: o.matrixWorld.clone() });
+  });
+  return parts;
 }
+const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0), M = new THREE.Matrix4();
 
 export class Traffic {
   // `kinds`: the city's vehicles (src/cities/*.js); `avenue` ones (buses) keep to the main roads.
@@ -34,8 +51,7 @@ export class Traffic {
         // Buses only on the outer ring and the main avenues.
         let kind = kinds[k++ % kinds.length];
         if (kind.avenue && lane.line % (5 * CELL) !== 0) kind = kinds[0];
-        const mesh = carMesh(kind);
-        scene.add(mesh);
+        const mesh = new THREE.Object3D();   // where the car is; drawn by its kind's instances
         this.cars.push({
           lane, kind, mesh, s: (i / perLane) * SPAN + Math.random() * 60, speed: kind.speed,
           pos: new THREE.Vector3(), fwd: new THREE.Vector2(), stop: 0, shove: new THREE.Vector2(), honked: 0,
@@ -43,7 +59,23 @@ export class Traffic {
         });
       }
     }
+    this.kinds = [...new Set(this.cars.map((c) => c.kind))].map((kind) => {
+      const cars = this.cars.filter((c) => c.kind === kind);
+      cars.forEach((c, i) => { c.slot = i; });
+      return { cars, parts: instanced(scene, kind, cars.length) };
+    });
     this.update(0, []);
+  }
+
+  // Copies every car's place into its kind's instances.
+  draw() {
+    for (const { cars, parts } of this.kinds) {
+      for (const c of cars) {
+        c.mesh.updateMatrix();
+        for (const p of parts) p.mesh.setMatrixAt(c.slot, c.hidden ? HIDDEN : M.multiplyMatrices(c.mesh.matrix, p.local));
+      }
+      for (const p of parts) p.mesh.instanceMatrix.needsUpdate = true;
+    }
   }
 
   // Moves every car within `r` metres of (x, z) further along its lane, out of the way.
@@ -115,6 +147,7 @@ export class Traffic {
       c.shove.multiplyScalar(Math.exp(-3 * dt));
       this.place(c);
     }
+    this.draw();
   }
 
   // Puts the car's position and mesh where its distance along the lane says.
@@ -129,6 +162,9 @@ export class Traffic {
       c.pos.set(lane.line + offset, 0, along);
       c.mesh.rotation.y = lane.dir > 0 ? 0 : Math.PI;
     }
+    // Inside the landmark block (see lanes()): hidden, and nothing can hit it.
+    const half = c.kind.len / 2;
+    c.hidden = !!lane.cut && along + half > lane.cut[0] + 1.5 && along - half < lane.cut[1] - 1.5;
     c.mesh.position.set(c.pos.x + c.shove.x, 0, c.pos.z + c.shove.y);
     c.mesh.rotation.z = c.shove.length() * 0.04;
   }
@@ -136,6 +172,7 @@ export class Traffic {
   // Returns the car the point overlaps, if any.
   hit(p, r) {
     for (const c of this.cars) {
+      if (c.hidden) continue;
       const hx = (c.lane.axis === 'x' ? c.kind.len : c.kind.w) / 2 + r;
       const hz = (c.lane.axis === 'x' ? c.kind.w : c.kind.len) / 2 + r;
       if (Math.abs(p.x - c.pos.x) < hx && Math.abs(p.z - c.pos.z) < hz && p.y < c.kind.h + 0.3) return c;
