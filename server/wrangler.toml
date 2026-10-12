@@ -1,9 +1,17 @@
 # The Pizza Driver world leaderboard: a Cloudflare Worker with one SQLite-backed Durable Object.
-# Deploy with `npm run deploy` (or the "Deploy leaderboard" GitHub Action); it creates everything
+# Also serves the game (../dist). Deploy with `npm run deploy` (or the "Deploy leaderboard" GitHub Action); it creates everything
 # it needs on the free plan, no database to set up by hand.
 name = "pizza-driver-board"
 main = "src/index.js"
 compatibility_date = "2025-09-01"
+
+# The game itself is served from the same Worker, so it can be played (and the world board tested)
+# at the workers.dev address. Each deploy builds it first; /board and /submit still reach the code.
+[build]
+command = "cd .. && npm ci && npx vite build"
+
+[assets]
+directory = "../dist"
 
 [[durable_objects.bindings]]
 name = "BOARD"
