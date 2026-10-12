@@ -67,6 +67,7 @@ class Game {
     this.rivals = makeRivals(this.scene, this.world);
     this.input = new Input();
     this.audio = new Audio();
+    this.audio.setCity(this.cityId);
     this.audio.setMuted(store.get('muted', false));
     ui.muteBtn.classList.toggle('off', this.audio.muted);
 
@@ -307,6 +308,7 @@ class Game {
     for (const c of this.people.statics) this.world.posts.push({ x: c.x, z: c.z, r: 0.6 });
     this.traffic.onHonk = (c) => { if (c.pos.distanceTo(this.player.pos) < 25 && this.state === 'race') this.audio.sfx('horn'); };
     this.look.setCity?.(this.city);
+    this.audio?.setCity(this.city.id);
     if (this.player) {
       this.player.world = this.world;
       for (const r of this.rivals) r.world = this.world;
@@ -335,7 +337,7 @@ class Game {
     this.countdown = 3;
     ui.count.textContent = '3';
     this.audio.sfx('tick');
-    this.audio.bpm = 156;
+    this.audio.hurry = false;
     this.audio.startMusic();
   }
 
@@ -385,7 +387,7 @@ class Game {
         this.show(null);
         this.state = 'race';
         this.toast('GO!', 700);
-        this.audio.shout('Pizza Driver!');
+        this.audio.shout();
         SDK.gameplayStart();
       }
     }
@@ -407,6 +409,7 @@ class Game {
     this.player.update(dt, this.input, racing);
     for (const r of this.rivals) r.update(dt, racing, this.player);
 
+    this.audio.drive(this.player, this.state === 'race' || this.state === 'countdown', this.sirenLevel());
     if (racing) this.raceLogic(dt);
     this.roadworks(dt);
     this.handleEvents();
@@ -438,11 +441,18 @@ class Game {
       if (!m.who) continue;
       m.who.speed *= 0.9;
       if (m.who === this.player) {
-        this.audio.sfx('bump');
+        this.audio.sfx('clatter');
         this.fx.dust(this.player.pos, 8);
         this.shake = Math.max(this.shake || 0, 0.15);
       }
     }
+  }
+
+  // How loud the nearest police siren is: cruisers within 60 m of the rider.
+  sirenLevel() {
+    let near = 60;
+    for (const c of this.traffic.cars) if (c.kind.id === 'police') near = Math.min(near, c.pos.distanceTo(this.player.pos));
+    return 1 - near / 60;
   }
 
   raceLogic(dt) {
@@ -478,6 +488,7 @@ class Game {
           r.hitBy(p.pos.x, p.pos.z, 15, 1.8);
           p.hitBy(r.pos.x, r.pos.z, 2, 0, 0.92);
           this.toast('TAKE THAT!', 700);
+          this.audio.sfx('punch');
         } else {
           r.hitBy(p.pos.x, p.pos.z, 7, 0.5);
           p.hitBy(r.pos.x, r.pos.z, 7, 3, 0.75);
@@ -523,7 +534,7 @@ class Game {
     }
     if (!cp && p.pos.distanceTo(this.world.customerPos) < 10) return this.deliver();
 
-    this.audio.bpm = this.timeLeft < RACE.hurryTime ? 180 : 156;
+    this.audio.hurry = this.timeLeft < RACE.hurryTime;
     const sec = Math.ceil(this.timeLeft);
     if (sec <= 5 && sec !== this.lastTick && sec > 0) { this.lastTick = sec; this.audio.sfx('tick'); }
     if (this.timeLeft <= 0) {
@@ -543,7 +554,6 @@ class Game {
     SDK.happyTime();
     this.audio.stopMusic();
     this.audio.sfx('win');
-    this.audio.shout('Pizza Driver!');
     const place = this.rank();
     const base = [25, 15, 10, 5][place - 1];
     const timeBonus = Math.round(this.timeLeft);
@@ -556,6 +566,7 @@ class Game {
       this.records[this.recordKey] = this.raceTime;
       store.set('records', this.records);
       this.toast('NEW RECORD!', 2500);
+      setTimeout(() => this.audio.sfx('record'), 1300);
     }
     this.lastRecord = { time: this.raceTime, best, record };
     const recordBonus = record && best ? RECORD_BONUS : 0;
@@ -568,6 +579,8 @@ class Game {
     const order = [...this.rivals.map((r) => ({ name: r.def.name, left: r.remaining() })), { name: null, left: mine }].sort((a, b) => a.left - b.left);
     this.ranking.afterDelivery(Object.fromEntries(order.map((o, i) => [o.name, i + 1])));
     this.addTips(this.lastTips);
+    if (!record) setTimeout(() => this.audio.shout(), 1300);
+    setTimeout(() => this.audio.sfx('tips'), 2600);
     this.rankBefore = before;
     this.showRankLine();
     $('double-btn').classList.remove('hidden');
