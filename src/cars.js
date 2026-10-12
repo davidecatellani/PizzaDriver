@@ -344,3 +344,51 @@ export function bus(kind, { stripe = 0x1d5fbf, roof = 0xf0f0f0, sign = 'M15 BROA
   g.add(dest);
   return g;
 }
+
+// New York police cruiser: a white saloon with blue stripes, POLICE on the doors, a push bar and
+// a light bar flashing red and blue.
+export function police(kind) {
+  const k = car(kind, { belt: 0.98, roof: 1.46, glass: [-1.55, -0.95, 0.35, 0.98], rim: 0x2a2c2f });
+  const h = kind.len / 2;
+  for (const sx of [-1, 1]) {
+    k.add(boxG(0.02, 0.12, kind.len - 1.2, sx * (kind.w / 2 + 0.006), 0.62, -0.1), 0x1d3f8f);
+    k.add(boxG(0.02, 0.04, kind.len - 1.2, sx * (kind.w / 2 + 0.007), 0.5, -0.1), 0x1d3f8f);
+  }
+  k.add(boxG(kind.w * 0.6, 0.35, 0.08, 0, 0.6, h + 0.12), 0x1a1a1a, true);
+  const g = k.build();
+  for (const sx of [-1, 1]) {
+    const word = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.22), policeWord());
+    word.position.set(sx * (kind.w / 2 + 0.012), 0.8, 0.15);
+    word.rotation.y = sx * Math.PI / 2;
+    g.add(word);
+  }
+  const bar = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.08, 0.32), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+  const [red, blue] = flashMats();
+  const left = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.14, 0.28), red);
+  const right = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.14, 0.28), blue);
+  left.position.set(-0.32, 0.1, 0); right.position.set(0.32, 0.1, 0);
+  bar.add(base, left, right);
+  bar.rotation.y = Math.PI / 2;
+  bar.position.set(0, 1.52, -0.25);
+  // The flash runs off the clock, so every cruiser blinks without any per-car update.
+  left.onBeforeRender = () => {
+    const on = Math.floor(performance.now() / 160) % 2 === 0;
+    red.emissiveIntensity = on ? 3 : 0.2;
+    blue.emissiveIntensity = on ? 0.2 : 3;
+  };
+  g.add(bar);
+  return g;
+}
+let wordMat, flash;
+function policeWord() {
+  wordMat ??= new THREE.MeshBasicMaterial({ map: signText('POLICE', { bg: '#ffffff', fg: '#1d3f8f', w: 256, h: 56, font: 'bold 44px sans-serif' }), transparent: true });
+  return wordMat;
+}
+function flashMats() {
+  flash ??= [
+    new THREE.MeshStandardMaterial({ color: 0xff2020, emissive: 0xff1010, emissiveIntensity: 2 }),
+    new THREE.MeshStandardMaterial({ color: 0x2050ff, emissive: 0x1040ff, emissiveIntensity: 2 }),
+  ];
+  return flash;
+}

@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { CELL, GRID } from '../config.js';
 import { mat } from '../assets.js';
 import * as TEX from '../textures.js';
-import { sedan, suv, boxTruck, bus } from '../cars.js';
+import { sedan, suv, boxTruck, bus, police } from '../cars.js';
 import { HALF, ALLEY_HALF, PALAZZO, TUNNEL, bayUVs, coloredBox, paint, addTrees, patch, curtain, seeded } from '../cityKit.js';
 
 // Manhattan: brick walk-ups with fire escapes and water towers, glass and Art Deco towers,
@@ -200,6 +200,7 @@ export const manhattan = {
     { id: 'cab', len: 4.8, w: 1.95, h: 1.5, color: 0xf2bf0f, speed: 15, reckless: 0.4, build: (k) => sedan(k, { taxi: true }) },
     { id: 'suv', len: 4.9, w: 2.0, h: 1.9, color: 0x15171a, speed: 13, build: (k) => suv(k) },
     { id: 'cab', len: 4.8, w: 1.95, h: 1.5, color: 0xf2bf0f, speed: 14, reckless: 0.4, build: (k) => sedan(k, { taxi: true }) },
+    { id: 'police', len: 4.9, w: 1.95, h: 1.6, color: 0xf4f4f2, speed: 15, reckless: 0.5, build: (k) => police(k) },
     { id: 'van', len: 6.2, w: 2.2, h: 3, color: 0xf2f2ee, speed: 11, build: (k) => boxTruck(k) },
     { id: 'cab', len: 4.8, w: 1.95, h: 1.5, color: 0xf2bf0f, speed: 14, reckless: 0.4, build: (k) => sedan(k, { taxi: true }) },
     { id: 'bus', len: 12, w: 2.6, h: 3.2, color: 0xf4f4f4, speed: 9, avenue: true, build: (k) => bus(k) },
