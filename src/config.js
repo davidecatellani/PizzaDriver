@@ -90,6 +90,6 @@ export const RIVALS = [
   { name: 'Tony', color: 0xe08a1e, speed: 0.95, aggression: 0.85 },
 ];
 
-// The world leaderboard server (server/ in this repo). Empty: the game keeps its local board only.
+// The world leaderboard server (server/ in this repo, deployed by Cloudflare from main). Empty: local board only.
 // A build can also set it with VITE_BOARD_URL.
-export const BOARD_URL = import.meta.env.VITE_BOARD_URL || '';
+export const BOARD_URL = import.meta.env.VITE_BOARD_URL || 'https://pizza-driver-board.goat-leaderboard.workers.dev';
