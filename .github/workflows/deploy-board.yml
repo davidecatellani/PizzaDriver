@@ -12,14 +12,23 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      READY: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # Until the secrets are added there is nothing to deploy to: skip instead of failing.
+      - if: env.READY != 'true'
+        run: echo "::notice::Add the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets to deploy the leaderboard."
+      - if: env.READY == 'true'
+        uses: actions/checkout@v4
+      - if: env.READY == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm ci
+      - if: env.READY == 'true'
+        run: npm ci
         working-directory: server
-      - run: npx wrangler deploy
+      - if: env.READY == 'true'
+        run: npx wrangler deploy
         working-directory: server
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
