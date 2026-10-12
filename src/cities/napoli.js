@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { CELL, GRID } from '../config.js';
 import { box, mat, makeObject } from '../assets.js';
 import * as TEX from '../textures.js';
+import { bubble, ape, hatch, bus } from '../cars.js';
 import { HALF, ALLEY_HALF, PALAZZO, TUNNEL, inPalazzo, bayUVs, coloredBox } from '../cityKit.js';
 
 // Napoli: plastered palazzi with balconies and shopfront arches, basalt paving, laundry across
@@ -180,12 +181,14 @@ export const napoli = {
     { axis: 'x', at: 6, from: 0, to: 2 },    // Stadio
   ],
 
-  // Traffic: Meshy models where loaded, boxes otherwise.
+  // Traffic: little round city cars, Ape three-wheelers, a hatchback, the orange bus.
   cars: [
-    { id: 'fiat_500', len: 4, w: 2, h: 1.6, color: 0xf3ead2, speed: 13 },
-    { id: 'ape', len: 3.4, w: 1.6, h: 2, color: 0x8ec5e8, speed: 10 },
-    { id: 'fiat_500', len: 4, w: 2, h: 1.6, color: 0xc8302c, speed: 14 },
-    { id: 'bus', len: 10, w: 3, h: 3.6, color: 0xf08a24, speed: 9, avenue: true },
+    { id: 'bubble', len: 3.4, w: 1.6, h: 1.5, color: 0xf3ead2, speed: 13, build: (k) => bubble(k) },
+    { id: 'ape', len: 3.2, w: 1.45, h: 1.9, color: 0x8ec5e8, speed: 10, build: (k) => ape(k) },
+    { id: 'bubble', len: 3.4, w: 1.6, h: 1.5, color: 0xc8302c, speed: 14, build: (k) => bubble(k) },
+    { id: 'hatch', len: 3.8, w: 1.7, h: 1.5, color: 0xe9e9e4, speed: 13, build: (k) => hatch(k) },
+    { id: 'bubble', len: 3.4, w: 1.6, h: 1.5, color: 0x6fae7a, speed: 13, build: (k) => bubble(k) },
+    { id: 'bus', len: 10, w: 2.5, h: 3.2, color: 0xf08a24, speed: 9, avenue: true, build: (k) => bus(k, { stripe: null, roof: 0xe8e0d0, sign: 'R2 STAZIONE' }) },
   ],
 
   // Jumps, cycled along the long straights.

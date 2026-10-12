@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { CELL, GRID } from './config.js';
-import { box, mat, makeObject } from './assets.js';
 
 // City traffic: lanes on every street in both directions, cars that keep their distance,
 // brake for riders in front of them, honk, and get shoved when hit.
@@ -19,24 +18,10 @@ function lanes() {
   return out;
 }
 
+// Each kind is modelled once (src/cars.js) and cloned: clones share geometry and materials.
 function carMesh(kind) {
-  if (kind.build) return kind.build(kind);
-  return makeObject(kind.id, kind.len, () => {
-    const g = new THREE.Group();
-    const body = box(kind.w, kind.h * 0.6, kind.len, kind.color);
-    body.position.y = kind.h * 0.3 + 0.35; g.add(body);
-    const cab = box(kind.w * 0.9, kind.h * 0.4, kind.len * 0.5, kind.color);
-    cab.position.set(0, kind.h * 0.8 + 0.35, -kind.len * 0.05); g.add(cab);
-    const glass = box(kind.w * 0.92, kind.h * 0.25, 0.1, 0x223344);
-    glass.position.set(0, kind.h * 0.82 + 0.35, kind.len * 0.21); g.add(glass);
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const wh = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.3, 10), mat(0x111111));
-      wh.rotation.z = Math.PI / 2;
-      wh.position.set(sx * kind.w * 0.5, 0.35, sz * kind.len * 0.32);
-      g.add(wh);
-    }
-    return g;
-  }, { vehicle: true });
+  kind.proto ??= kind.build(kind);
+  return kind.proto.clone();
 }
 
 export class Traffic {
