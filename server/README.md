@@ -2,6 +2,7 @@
 
 A Cloudflare Worker with one SQLite-backed Durable Object: the world Richest Riders board
 (all-time tips) and the fastest delivery on each route. Free plan; no database to create.
+The same Worker builds and serves the game, so it is playable at the workers.dev address.
 
 - Local: `npm install && npm run dev` (http://localhost:8787), then build the game with
   `VITE_BOARD_URL=http://localhost:8787 npx vite build`.
