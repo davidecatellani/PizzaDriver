@@ -53,8 +53,16 @@ async function sha(text) {
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// Names are shown to every player, so offensive ones (English and Italian, with the usual letter
+// swaps) are replaced. Not exhaustive: it keeps the obvious out of the public board.
+const BAD = ['fuck', 'shit', 'cunt', 'bitch', 'nigg', 'fag', 'whore', 'slut', 'dick', 'cock', 'pussy', 'rape', 'nazi', 'hitler',
+  'porn', 'cazz', 'figa', 'fica', 'merd', 'puttan', 'troia', 'stronz', 'vaffan', 'frocio', 'negro', 'coglion', 'minchi', 'bastard'];
+const LEET = { 0: 'o', 1: 'i', 3: 'e', 4: 'a', 5: 's', 7: 't', '@': 'a', $: 's', '!': 'i' };
+
 function cleanName(n) {
   const s = String(n ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 14);
+  const flat = s.toLowerCase().replace(/[013457@$!]/g, (c) => LEET[c]).replace(/[^a-z]/g, '');
+  if (BAD.some((w) => flat.includes(w))) return 'Rider';
   return s || 'Rider';
 }
 
