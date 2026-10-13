@@ -18,6 +18,7 @@ import { Profile } from './shop.js';
 import { Garage } from './garage.js';
 import { Ranking } from './ranking.js';
 import { Online } from './online.js';
+import { Tutorial } from './tutorial.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -67,10 +68,15 @@ class Game {
     this.player = new Player(this.scene, this.world);
     this.rivals = makeRivals(this.scene, this.world);
     this.input = new Input();
+    this.coach = new Tutorial($('coach'));
+    this.coach.onDone = () => this.audio.sfx('checkpoint');
+    this.coach.onFinish = () => store.set('tutorialDone', true);
     this.audio = new Audio();
     this.audio.setCity(this.cityId);
-    this.audio.setMuted(store.get('muted', false));
-    ui.muteBtn.classList.toggle('off', this.audio.muted);
+    // Sound is off when the player muted the game, or muted audio in their CrazyGames settings.
+    this.platformMute = SDK.platformMuted();
+    SDK.onPlatformMute((m) => { this.platformMute = m; this.applyMute(); });
+    this.applyMute();
 
 
     this.state = 'menu';
@@ -174,6 +180,12 @@ class Game {
       this.show(from.screen);
     };
     $('rider-name').onclick = () => this.askName();
+    // HOW TO PLAY: a ride in the city on show with the coach back on (a locked city falls back to the current one).
+    $('howto-btn').onclick = () => {
+      this.tutorialAgain = true;
+      if (!this.ownedCities.includes(this.menuCityDef.id)) { this.menuCity = CITIES.indexOf(this.city); this.showCity(); }
+      this.startRace();
+    };
     const done = () => {
       this.playerName = $('name-input').value.trim().slice(0, 14) || 'Rider';
       store.set('name', this.playerName);
@@ -193,15 +205,21 @@ class Game {
   }
 
   toggleMute() {
-    this.audio.setMuted(!this.audio.muted);
-    store.set('muted', this.audio.muted);
-    ui.muteBtn.classList.toggle('off', this.audio.muted);
+    store.set('muted', !store.get('muted', false));
+    this.applyMute();
+  }
+
+  applyMute() {
+    if (this.adPlaying) return;
+    const off = store.get('muted', false) || this.platformMute;
+    this.audio.setMuted(off);
+    ui.muteBtn.classList.toggle('off', off);
   }
 
   adCallbacks() {
     return {
       onStart: () => { this.adPlaying = true; this.audio.setMuted(true); },
-      onEnd: () => { this.adPlaying = false; this.audio.setMuted(store.get('muted', false)); },
+      onEnd: () => { this.adPlaying = false; this.applyMute(); },
     };
   }
 
@@ -422,6 +440,9 @@ class Game {
 
   update(dt) {
     const racing = this.state === 'race';
+    // The first-ride coach stops the clock and holds the rivals until the last tip.
+    this.coachHold = racing && this.coach.update(dt);
+    if (this.coachHold) this.traffic.calm = Math.max(this.traffic.calm, 1);
     if (this.state === 'countdown') {
       this.countdown -= dt;
       const n = Math.ceil(this.countdown);
@@ -432,6 +453,8 @@ class Game {
         this.toast('GO!', 700);
         this.audio.shout();
         SDK.gameplayStart();
+        if (!store.get('tutorialDone', false) || this.tutorialAgain) this.coach.start(this.input);
+        this.tutorialAgain = false;
       }
     }
 
@@ -450,7 +473,7 @@ class Game {
       }
     }
     this.player.update(dt, this.input, racing);
-    for (const r of this.rivals) r.update(dt, racing, this.player);
+    for (const r of this.rivals) r.update(dt, racing && !this.coachHold, this.player);
 
     this.audio.drive(this.player, this.state === 'race' || this.state === 'countdown', this.sirenLevel());
     if (racing) this.raceLogic(dt);
@@ -502,7 +525,7 @@ class Game {
   raceLogic(dt) {
     const p = this.player;
     this.raceTime += dt;
-    this.timeLeft -= dt;
+    if (!this.coachHold) this.timeLeft -= dt;
 
     // Cars: a real hit shoves the rider away, spins them and cools the pizza. Jumping over is safe.
     const car = this.traffic.hit(p.pos, PLAYER.radius);
@@ -583,6 +606,7 @@ class Game {
     if (sec <= 5 && sec !== this.lastTick && sec > 0) { this.lastTick = sec; this.audio.sfx('tick'); }
     if (this.timeLeft <= 0) {
       this.timeLeft = 0;
+      this.coach.finish();
       this.state = 'timeup';
       SDK.gameplayStop();
       this.audio.stopMusic();
@@ -592,6 +616,7 @@ class Game {
   }
 
   deliver() {
+    this.coach.finish();
     this.state = 'delivered';
     this.player.cheer = true;
     SDK.gameplayStop();
@@ -755,6 +780,7 @@ class Game {
 
   // From the end of a race back to the title menu (to switch city, see the board, ...).
   toMenu() {
+    this.coach.finish();
     this.audio.stopMusic();
     if (this.state === 'delivered') {   // done with this route: the menu offers the next one
       this.deliveryIndex = (this.deliveryIndex + 1) % this.city.deliveries.length;

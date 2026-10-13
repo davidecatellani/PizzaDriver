@@ -60,3 +60,11 @@ export async function username() {
     return null;
   }
 }
+
+// CrazyGames "mute audio" setting: the current value, and a listener for when the player changes it.
+export function platformMuted() {
+  try { return !!sdk?.game?.settings?.muteAudio; } catch { return false; }
+}
+export function onPlatformMute(fn) {
+  try { sdk?.game?.addSettingsChangeListener((s) => fn(!!s?.muteAudio)); } catch { /* ignore */ }
+}

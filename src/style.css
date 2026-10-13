@@ -164,3 +164,81 @@ button:active { transform: translateY(3px); }
 .tab.on { background: #ffd23f; color: #6a040f; }
 .ranking-list li.wait, .ranking-list li.gap { justify-content: center; background: none; }
 .world-line { font-size: 16px; font-family: Arial, sans-serif; margin-top: 4px; opacity: 0.95; }
+
+/* Menu body: stacked under the title, beside it on short landscape phones. */
+.menu-body { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+#menu { overflow-y: auto; touch-action: pan-y; justify-content: safe center; }
+@media (max-height: 560px) and (orientation: landscape) {
+  #menu { flex-direction: row; justify-content: safe center; align-items: safe center; gap: max(24px, 5vw); padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); }
+  #menu h1 { font-size: min(13vw, 25vh); flex: none; }
+  #menu .menu-body { gap: 7px; max-height: 100%; max-width: 58vw; }
+  #menu .city-row { margin: 0; gap: 6px; }
+  #menu .city-arrow { padding: 4px 10px; font-size: 16px; }
+  #menu .city-name { font-size: 22px; min-width: 0; }
+  #menu .sub { margin: 0; font-size: 15px; }
+  #menu .record-line { margin: 0; font-size: 15px; }
+  #menu button.big { font-size: 24px; padding: 6px 28px; box-shadow: 0 4px 0 #6a040f; }
+  #menu .menu-row button { font-size: 14px; padding: 6px 12px; margin: 0; }
+  #menu .rider-name { font-size: 13px; padding: 0; }
+  #menu .hint { display: none; }
+  #menu .tips { margin: 0; font-size: 15px; }
+}
+@media (max-height: 360px) and (orientation: landscape) {
+  #menu .record-line, #menu .sub { display: none; }
+}
+@media (max-height: 560px) and (orientation: landscape) and (max-width: 700px) {
+  #menu h1 { font-size: 11vw; }
+  #menu .menu-row button { font-size: 12px; padding: 5px 9px; }
+}
+@media (max-height: 560px) { .mute { top: auto; bottom: max(14px, env(safe-area-inset-bottom)); width: 38px; height: 38px; font-size: 17px; } }
+@media (max-width: 480px) and (orientation: portrait) {
+  #menu .hint { font-size: 12px; }
+  #menu .menu-row button { font-size: 15px; padding: 8px 12px; }
+}
+
+/* First-ride coach: one tip at a time, above the turn arrow. */
+.coach {
+  position: fixed; left: 50%; bottom: calc(16% + 60px); transform: translateX(-50%);
+  width: min(560px, 62vw); padding: 12px 18px 8px; border-radius: 18px; text-align: center;
+  background: #6a040fe6; border: 3px solid #ffd23f; box-shadow: 0 8px 24px #0007; z-index: 5;
+}
+.coach.pop { animation: coach-pop .35s ease-out; }
+@keyframes coach-pop { from { transform: translateX(-50%) scale(.8); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+.coach-text { font-family: Arial, sans-serif; font-weight: bold; font-size: 20px; line-height: 1.3; }
+.coach-text b { font-family: 'Arial Black', Arial, sans-serif; color: #ffd23f; }
+.coach-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
+.coach-dots { display: flex; gap: 5px; }
+.coach-dots i { width: 9px; height: 9px; border-radius: 50%; background: #fff4; }
+.coach-dots i.on { background: #ffd23f; }
+.coach-dots i.done { background: #39ff88; }
+.coach-skip { font-size: 12px; padding: 3px 10px; border-width: 2px; border-radius: 8px; }
+@media (max-height: 560px) {
+  .minimap { width: 110px; height: 110px; }
+  .coach { bottom: calc(16% + 44px); width: min(440px, 46vw); padding: 8px 12px 6px; }
+  .coach-text { font-size: 16px; }
+}
+
+/* Every screen scrolls rather than clipping, and stays centred when it fits. */
+.screen { overflow-y: auto; touch-action: pan-y; justify-content: safe center; }
+.screen .col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+@media (max-height: 560px) and (orientation: landscape) {
+  .screen { gap: 8px; padding: max(8px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left)); }
+  .screen h2 { font-size: min(9vw, 13vh); }
+  .screen .sub { margin: 0; font-size: 15px; }
+  .screen button.big { font-size: 22px; padding: 6px 24px; box-shadow: 0 4px 0 #6a040f; }
+  .screen button { font-size: 15px; padding: 6px 16px; }
+  .screen .menu-row button { font-size: 13px; padding: 5px 10px; margin: 0; }
+  .screen .tips { margin: 0; font-size: 15px; }
+  /* Delivered: the breakdown on the left, the buttons on the right. */
+  #delivered { flex-direction: row; align-items: safe center; gap: max(24px, 5vw); }
+  #delivered .col { gap: 6px; }
+  .result { font-size: 15px; line-height: 1.35; }
+  .record-result { font-size: 16px; }
+  .record-result small { font-size: 12px; }
+  .new-record { font-size: 20px; }
+  .world-line { font-size: 13px; }
+  .count { font-size: 100px; }
+  .ranking-list { max-height: 52vh; }
+  .ranking-list li { font-size: 15px; padding: 4px 12px; margin: 3px 0; }
+  .name-input { font-size: 22px; padding: 6px 12px; }
+}

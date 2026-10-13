@@ -1,4 +1,5 @@
-// Keyboard + touch input. Touch: hold left/right half of the screen to steer, BOOST button for the turbo.
+// Keyboard + touch input. Touch: hold left/right half of the screen to steer; double-tap and hold a half
+// to drift that way (the DRIFT button works too); TRICK and KICK buttons.
 
 export class Input {
   constructor() {
@@ -6,18 +7,22 @@ export class Input {
     this.touchSteer = 0;
     this.touchBoost = false;
     this.touchBrake = false;
+    this.touchDrift = false;   // a double-tap-and-hold on either half
     this.kickQueued = null;   // 1 = kick left, -1 = kick right, 0 = towards the nearest rival
+    this.kicks = 0;           // kicks asked for so far (the tutorial watches it)
     addEventListener('keydown', (e) => {
       this.keys.add(e.code);
-      if (!e.repeat && e.code === 'KeyZ') this.kickQueued = 1;
-      if (!e.repeat && e.code === 'KeyX') this.kickQueued = -1;
-      if (!e.repeat && e.code === 'KeyC') this.kickQueued = 0;
+      if (!e.repeat && e.code === 'KeyZ') { this.kickQueued = 1; this.kicks++; }
+      if (!e.repeat && e.code === 'KeyX') { this.kickQueued = -1; this.kicks++; }
+      if (!e.repeat && e.code === 'KeyC') { this.kickQueued = 0; this.kicks++; }
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
 
     const touches = new Map();
+    const drifting = new Set();   // touches that began as the second tap of a double tap
+    let lastTap = { side: 0, time: -1e9 };
     const update = () => {
       let s = 0;
       for (const x of touches.values()) s += x < innerWidth / 2 ? 1 : -1;
@@ -26,9 +31,19 @@ export class Input {
     const canvasTouch = (e) => {
       if (e.target.closest('button')) return;
       for (const t of e.changedTouches) {
-        if (e.type === 'touchend' || e.type === 'touchcancel') touches.delete(t.identifier);
-        else touches.set(t.identifier, t.clientX);
+        if (e.type === 'touchend' || e.type === 'touchcancel') {
+          touches.delete(t.identifier);
+          drifting.delete(t.identifier);
+          continue;
+        }
+        if (e.type === 'touchstart') {
+          const side = t.clientX < innerWidth / 2 ? 1 : -1, now = performance.now();
+          if (side === lastTap.side && now - lastTap.time < 320) drifting.add(t.identifier);
+          lastTap = { side, time: now };
+        }
+        touches.set(t.identifier, t.clientX);
       }
+      this.touchDrift = drifting.size > 0;
       update();
     };
     for (const ev of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
@@ -45,7 +60,7 @@ export class Input {
     hold('boost-btn', 'touchBoost');
     hold('brake-btn', 'touchBrake');
     const kickBtn = document.getElementById('kick-btn');
-    kickBtn?.addEventListener('touchstart', (e) => { e.preventDefault(); this.kickQueued = 0; });
+    kickBtn?.addEventListener('touchstart', (e) => { e.preventDefault(); this.kickQueued = 0; this.kicks++; });
   }
 
   get steer() {
@@ -57,7 +72,7 @@ export class Input {
   }
 
   get brake() {
-    return this.keys.has('ArrowDown') || this.keys.has('KeyS') || this.touchBrake;
+    return this.keys.has('ArrowDown') || this.keys.has('KeyS') || this.touchBrake || this.touchDrift;
   }
 
   // Takes the queued kick, if any.
