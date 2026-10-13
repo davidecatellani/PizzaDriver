@@ -30,8 +30,14 @@
   <button id="kick-btn" class="touch-only hidden">KICK</button>
   <button id="mute-btn" class="mute" aria-label="Mute">♪</button>
 
+  <div id="coach" class="coach hidden">
+    <div class="coach-text"></div>
+    <div class="coach-foot"><span class="coach-dots"></span><button class="coach-skip">SKIP</button></div>
+  </div>
+
   <div id="menu" class="screen">
     <h1>PIZZA<br />DRIVER</h1>
+    <div class="menu-body">
     <div class="city-row">
       <button id="city-prev" class="city-arrow" aria-label="Previous city">◀</button>
       <div id="city-name" class="city-name"></div>
@@ -43,11 +49,13 @@
     <div class="menu-row">
       <button id="garage-btn" class="garage-open">GARAGE</button>
       <button id="ranking-btn" class="garage-open">RICHEST RIDERS</button>
+      <button id="howto-btn" class="garage-open">HOW TO PLAY</button>
     </div>
     <button id="rider-name" class="rider-name"></button>
     <p class="hint desktop-only">← → steer · ↓ brake / reverse (hold while steering to drift) · SPACE wheelie, trick in the air · jump ramps for TURBO · Z / X kick · M mute</p>
     <p class="hint touch-only">Hold left / right to steer · DRIFT while steering · TRICK for wheelies and air spins · jump ramps for TURBO · KICK the rivals</p>
     <p id="total-tips" class="tips"></p>
+    </div>
   </div>
 
   <div id="countdown" class="screen transparent hidden"><div id="count" class="count">3</div></div>

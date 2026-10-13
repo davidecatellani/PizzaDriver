@@ -7,11 +7,12 @@ export class Input {
     this.touchBoost = false;
     this.touchBrake = false;
     this.kickQueued = null;   // 1 = kick left, -1 = kick right, 0 = towards the nearest rival
+    this.kicks = 0;           // kicks asked for so far (the tutorial watches it)
     addEventListener('keydown', (e) => {
       this.keys.add(e.code);
-      if (!e.repeat && e.code === 'KeyZ') this.kickQueued = 1;
-      if (!e.repeat && e.code === 'KeyX') this.kickQueued = -1;
-      if (!e.repeat && e.code === 'KeyC') this.kickQueued = 0;
+      if (!e.repeat && e.code === 'KeyZ') { this.kickQueued = 1; this.kicks++; }
+      if (!e.repeat && e.code === 'KeyX') { this.kickQueued = -1; this.kicks++; }
+      if (!e.repeat && e.code === 'KeyC') { this.kickQueued = 0; this.kicks++; }
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -45,7 +46,7 @@ export class Input {
     hold('boost-btn', 'touchBoost');
     hold('brake-btn', 'touchBrake');
     const kickBtn = document.getElementById('kick-btn');
-    kickBtn?.addEventListener('touchstart', (e) => { e.preventDefault(); this.kickQueued = 0; });
+    kickBtn?.addEventListener('touchstart', (e) => { e.preventDefault(); this.kickQueued = 0; this.kicks++; });
   }
 
   get steer() {
