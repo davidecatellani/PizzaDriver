@@ -7,7 +7,7 @@ const STEPS = [
   { key: 'steer', desk: 'Hold <b>← →</b> to steer', mob: 'Hold the <b>LEFT</b> or <b>RIGHT</b> side of the screen to steer',
     done: (t, i) => i.steer !== 0 && t.hold(0.7) },
   { key: 'follow', desk: 'Follow the <b>arrows</b> and the <b>minimap</b> to the customer 🍕', mob: null, done: (t) => t.wait(3.2) },
-  { key: 'drift', desk: 'Hold <b>↓</b> while steering to <b>DRIFT</b> round corners', mob: 'Hold <b>DRIFT</b> while steering to slide round corners',
+  { key: 'drift', desk: 'Hold <b>↓</b> while steering to <b>DRIFT</b> round corners', mob: '<b>Double-tap and hold</b> the left or right side to <b>DRIFT</b> round corners',
     done: (t, i) => i.brake && i.steer !== 0 && t.hold(0.5) },
   { key: 'trick', desk: 'Press <b>SPACE</b> for a wheelie, and spin in the air off ramps', mob: 'Hold <b>TRICK</b> for a wheelie, and spin in the air off ramps',
     done: (t, i) => i.boost && t.hold(0.4) },
