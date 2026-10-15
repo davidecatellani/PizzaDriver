@@ -1,8 +1,10 @@
 // Thin wrapper around the CrazyGames SDK v3. Outside CrazyGames (local dev, other hosts)
 // every call is a safe no-op and rewarded ads are granted straight away.
+// The Android app build (VITE_PLATFORM=android) never loads the SDK: it shows AdMob ads instead (src/admob.js).
 
 const SDK_URL = 'https://sdk.crazygames.com/crazygames-sdk-v3.js';
 let sdk = null;
+let admob = null;
 
 function loadScript(src, timeoutMs) {
   return new Promise((resolve, reject) => {
@@ -16,6 +18,11 @@ function loadScript(src, timeoutMs) {
 }
 
 export async function initSDK() {
+  if (import.meta.env.VITE_PLATFORM === 'android') {
+    admob = await import('./admob.js');
+    admob.init();   // consent form and ad loading run in the background
+    return;
+  }
   try {
     await loadScript(SDK_URL, 3000);
     await window.CrazyGames.SDK.init();
@@ -35,6 +42,7 @@ export function happyTime() { try { sdk?.game.happytime(); } catch { /* ignore *
 // type: 'midgame' | 'rewarded'. Resolves true when the ad finished (reward earned).
 // onStart/onEnd let the game mute audio and pause while the ad plays.
 export function showAd(type, { onStart, onEnd } = {}) {
+  if (admob) return admob.show(type, { onStart, onEnd });
   if (!sdk) return Promise.resolve(true);
   return new Promise((resolve) => {
     let started = false;
