@@ -1,5 +1,6 @@
 // Thin wrapper around the CrazyGames SDK v3. Outside CrazyGames (local dev, other hosts)
 // every call is a safe no-op and rewarded ads are granted straight away.
+// The Android app build (VITE_PLATFORM=android) never loads the SDK: CrazyGames ads don't run in a Play Store app.
 
 const SDK_URL = 'https://sdk.crazygames.com/crazygames-sdk-v3.js';
 let sdk = null;
@@ -16,6 +17,7 @@ function loadScript(src, timeoutMs) {
 }
 
 export async function initSDK() {
+  if (import.meta.env.VITE_PLATFORM === 'android') return;
   try {
     await loadScript(SDK_URL, 3000);
     await window.CrazyGames.SDK.init();

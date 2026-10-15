@@ -1,0 +1,8 @@
+{
+  "appId": "com.davidecatellani.pizzadriver",
+  "appName": "Pizza Driver",
+  "webDir": "dist",
+  "android": {
+    "backgroundColor": "#000000"
+  }
+}
