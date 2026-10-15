@@ -1,8 +1,17 @@
 # Android app (Google Play)
 
 The web game is wrapped with [Capacitor](https://capacitorjs.com) into the native project in `android/`.
-The app build (`--mode android`, see `.env.android`) never loads the CrazyGames SDK, so ads are off
-and rewarded bonuses are granted straight away. AdMob could be added later with `@capacitor-community/admob`.
+The app build (`--mode android`, see `.env.android`) never loads the CrazyGames SDK: it shows AdMob ads instead
+(`src/admob.js`, `@capacitor-community/admob`): an interstitial between deliveries and rewarded video for the
+double-tips bonus, with Google's consent form for EU players.
+
+## AdMob ids
+
+Until real ids are set the app shows Google's test ads (they never pay). With an AdMob account:
+- app id (`ca-app-pub-...~...`) in `android/app/src/main/res/values/strings.xml`, `admob_app_id`;
+- interstitial and rewarded ad unit ids (`ca-app-pub-.../...`) in `.env.android`.
+
+Then rebuild. Never tap your own real ads: AdMob bans accounts for it.
 The game runs offline from the bundled files; only the world leaderboard needs the internet.
 
 ## Build
